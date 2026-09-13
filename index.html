@@ -706,6 +706,9 @@ async function openCompareView(ids){
    ========================================================= */
 (async function init(){
   await refreshGrid();
+  // lapor ke shell (kalau app ini dibuka di dalam iframe shell) bahwa
+  // grid produk pertama sudah selesai dimuat & dirender
+  if (window.parent !== window) window.parent.postMessage({ __elitechReady: 'katalog' }, '*');
 })();
 </script>
 </body>
