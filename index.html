@@ -82,7 +82,30 @@
 
   /* ---------- Grid & Card ---------- */
   #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;}
-  .card{position:relative;aspect-ratio:3/4;border-radius:var(--radius);overflow:hidden;background:var(--surface);cursor:pointer;}
+
+  /*
+   * FIX BUG "TEKS BERTUMPUK / TIDAK TERBACA":
+   * Semua anak .card (img, .ph-icon, .overlay) dulu pakai position:absolute,
+   * artinya TIDAK ADA elemen yang menyumbang tinggi ke .card -- satu-
+   * satunya sumber tinggi kartu adalah "aspect-ratio: 3/4". Kalau browser/
+   * webview yang dipakai TIDAK mendukung "aspect-ratio" (beberapa WebView
+   * Android lama, embed di iframe tertentu, dll), setiap .card langsung
+   * collapse ke tinggi 0 -- akibatnya semua .overlay dari puluhan kartu
+   * numpuk persis di titik yang sama, kelihatan seperti teks bertumpuk
+   * dan tidak terbaca.
+   *
+   * FIX: kasih "min-height" sebagai fallback, supaya kartu tetap punya
+   * tinggi minimum walau "aspect-ratio" tidak didukung/tidak dihitung.
+   */
+  .card{
+    position:relative;
+    aspect-ratio:3/4;
+    min-height:190px; /* fallback kalau aspect-ratio tidak didukung */
+    border-radius:var(--radius);
+    overflow:hidden;
+    background:var(--surface);
+    cursor:pointer;
+  }
   .card img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
   .card .ph-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-3);}
   .card .cmp-toggle{
@@ -100,12 +123,13 @@
   .empty-state{grid-column:1/-1;text-align:center;padding:48px 0;color:var(--text-3);font-size:14px;}
 
   /* ---------- Detail ---------- */
-  .hero-img{width:100%;border-radius:var(--radius);background:var(--surface);display:block;}
-  .hero-ph{width:100%;aspect-ratio:3/4;border-radius:var(--radius);background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--text-3);}
+  /* Sama seperti .card: kasih fallback tinggi supaya tidak collapse. */
+  .hero-img{width:100%;min-height:260px;border-radius:var(--radius);background:var(--surface);display:block;object-fit:cover;aspect-ratio:3/4;}
+  .hero-ph{width:100%;min-height:260px;aspect-ratio:3/4;border-radius:var(--radius);background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--text-3);}
   #gallery{display:flex;gap:8px;margin-top:8px;}
-  #gallery .thumb{flex:1;aspect-ratio:1/1;border-radius:8px;overflow:hidden;background:var(--surface);cursor:pointer;border:2px solid transparent;}
+  #gallery .thumb{position:relative;flex:1;min-height:64px;aspect-ratio:1/1;border-radius:8px;overflow:hidden;background:var(--surface);cursor:pointer;border:2px solid transparent;}
   #gallery .thumb.active{border-color:var(--brand);}
-  #gallery .thumb img{width:100%;height:100%;object-fit:cover;}
+  #gallery .thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
 
   .eyebrow{font-size:12px;color:var(--brand);margin:16px 0 2px;}
   .h-title{font-size:19px;font-weight:700;margin:0 0 2px;}
@@ -134,7 +158,8 @@
 
   #other-models{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;}
   .other-chip{flex-shrink:0;width:104px;cursor:pointer;border:1px solid var(--border);border-radius:var(--radius);padding:8px;text-align:center;}
-  .other-chip img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:6px;margin-bottom:6px;background:var(--surface);}
+  .other-chip .thumb-wrap{position:relative;width:100%;min-height:88px;aspect-ratio:1/1;border-radius:6px;margin-bottom:6px;background:var(--surface);overflow:hidden;}
+  .other-chip .thumb-wrap img,.other-chip .thumb-wrap .ph-icon{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:flex;align-items:center;justify-content:center;}
   .other-chip p{margin:0;font-size:12px;font-weight:600;}
   .other-chip p.p2{font-size:11px;color:var(--text-3);font-weight:400;margin-top:2px;}
 
@@ -153,7 +178,8 @@
   #modal-search{width:100%;height:40px;border:1px solid var(--border);border-radius:9px;padding:0 12px;font-size:14px;margin:12px 16px;width:calc(100% - 32px);}
   #modal-list{overflow-y:auto;padding:0 16px;flex:1;}
   .modal-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
-  .modal-row img{width:44px;height:44px;border-radius:8px;object-fit:cover;background:var(--surface);flex-shrink:0;}
+  .modal-row .thumb-wrap{position:relative;width:44px;height:44px;border-radius:8px;overflow:hidden;background:var(--surface);flex-shrink:0;}
+  .modal-row .thumb-wrap img,.modal-row .thumb-wrap .ph-icon{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:flex;align-items:center;justify-content:center;}
   .modal-row .info{flex:1;min-width:0;}
   .modal-row .info p{margin:0;font-size:13px;}
   .modal-row .info p.model{font-weight:600;}
@@ -167,7 +193,8 @@
   #compare-table{width:100%;border-collapse:collapse;}
   #compare-table th,#compare-table td{padding:8px 6px;text-align:center;vertical-align:top;border-bottom:1px solid var(--border);font-size:13px;}
   #compare-table td.label,#compare-table th.label{text-align:left;color:var(--text-2);font-size:12px;width:90px;}
-  #compare-table img{width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--surface);}
+  #compare-table .thumb-wrap{position:relative;width:64px;height:64px;margin:0 auto;border-radius:8px;overflow:hidden;background:var(--surface);}
+  #compare-table .thumb-wrap img,#compare-table .thumb-wrap .ph-icon{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:flex;align-items:center;justify-content:center;}
   #compare-table .model-name{font-weight:600;font-size:12px;margin-top:6px;}
   #compare-table ul{margin:0;padding-left:14px;text-align:left;font-size:12px;color:var(--text-2);}
   #compare-empty{text-align:center;color:var(--text-3);padding:48px 0;font-size:14px;}
@@ -299,9 +326,14 @@ function rupiah(n){ return 'Rp ' + Math.round(n).toLocaleString('id-ID'); }
 function priceRange(p){
   return p.hargaMin === p.hargaMax ? rupiah(p.hargaMin) : rupiah(p.hargaMin) + ' - ' + rupiah(p.hargaMax);
 }
-function thumbHtml(url, sizeIconPx){
-  if(url) return `<img src="${url}" alt="" loading="lazy">`;
-  return `<div class="ph-icon" style="position:static;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">${icon('box')}</div>`;
+// Dibungkus dalam wrapper posisi-relatif supaya ph-icon (absolute) selalu
+// punya induk berukuran pasti -- konsisten dengan fix .card di atas.
+function thumbHtml(url){
+  if(url) return `<img src="${url}" alt="" loading="lazy" onerror="this.parentElement.innerHTML=iconBoxOnly()">`;
+  return iconBoxOnly();
+}
+function iconBoxOnly(){
+  return `<div class="ph-icon">${icon('box')}</div>`;
 }
 
 /* =========================================================
@@ -384,7 +416,7 @@ function renderGrid(products){
     const disabled = !compareSet.has(p.id) && compareSet.size >= 3;
     return `
     <div class="card" data-id="${p.id}">
-      ${p.thumbnail ? `<img src="${p.thumbnail}" alt="" loading="lazy">` : `<div class="ph-icon">${icon('box')}</div>`}
+      ${p.thumbnail ? `<img src="${p.thumbnail}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph-icon',innerHTML:'${icon('box').replace(/'/g, "\\'")}'}))">` : `<div class="ph-icon">${icon('box')}</div>`}
       <button class="cmp-toggle" data-cmp="${p.id}" style="opacity:${disabled?'.35':'1'};color:${compareSet.has(p.id)?'var(--brand)':'var(--text-2)'}">${icon('compare')}</button>
       <div class="overlay">
         <p class="kat">#${p.kategori || 'Produk'}</p>
@@ -466,7 +498,7 @@ function renderDetail(p){
 
   el('view-detail').innerHTML = `
     ${images.length
-      ? `<img id="hero-img" class="hero-img" src="${images[0]}" alt="${p.model}">`
+      ? `<img id="hero-img" class="hero-img" src="${images[0]}" alt="${p.model}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'hero-ph',innerHTML:'${icon('box').replace(/'/g, "\\'")}'}))">`
       : `<div class="hero-ph">${icon('box')}</div>`}
     ${images.length > 1 ? `<div id="gallery"></div>` : ''}
 
@@ -506,7 +538,7 @@ function renderDetail(p){
   // gallery
   if(images.length > 1){
     const g = document.getElementById('gallery');
-    g.innerHTML = images.map((url,i)=>`<div class="thumb ${i===0?'active':''}" data-idx="${i}"><img src="${url}"></div>`).join('');
+    g.innerHTML = images.map((url,i)=>`<div class="thumb ${i===0?'active':''}" data-idx="${i}"><img src="${url}" onerror="this.style.display='none'"></div>`).join('');
     g.querySelectorAll('.thumb').forEach(t=>{
       t.addEventListener('click', ()=>{
         g.querySelectorAll('.thumb').forEach(x=>x.classList.remove('active'));
@@ -561,7 +593,7 @@ function renderDetail(p){
     const wrap = document.getElementById('other-models');
     wrap.innerHTML = p.modelLain.map(o=>`
       <div class="other-chip" data-id="${o.id}">
-        ${thumbHtml(o.thumbnail)}
+        <div class="thumb-wrap">${thumbHtml(o.thumbnail)}</div>
         <p>${o.model}</p>
         <p class="p2">${priceRange(o)}</p>
       </div>`).join('');
@@ -591,7 +623,7 @@ function renderModalList(query){
     const disabled = !checked && compareSet.size >= 3;
     return `
     <label class="modal-row" style="opacity:${disabled?'.4':'1'}">
-      ${thumbHtml(p.thumbnail)}
+      <div class="thumb-wrap">${thumbHtml(p.thumbnail)}</div>
       <div class="info">
         <p class="model">${p.model}</p>
         <p class="harga">${priceRange(p)}</p>
@@ -641,7 +673,7 @@ async function openCompareView(ids){
   el('view-compare').innerHTML = `
     <div style="overflow-x:auto;">
       <table id="compare-table">
-        <tr><th class="label"></th>${items.map(m=>`<th>${thumbHtml(m.thumbnail)}<p class="model-name">${m.model}</p></th>`).join('')}</tr>
+        <tr><th class="label"></th>${items.map(m=>`<th><div class="thumb-wrap">${thumbHtml(m.thumbnail)}</div><p class="model-name">${m.model}</p></th>`).join('')}</tr>
         ${rows.map(r=>`<tr><td class="label">${r.label}</td>${items.map(m=>`<td>${r.get(m)}</td>`).join('')}</tr>`).join('')}
         <tr><td class="label">Spesifikasi</td>${items.map(m=>`<td><ul>${(m.spesifikasi||[]).slice(0,4).map(s=>`<li>${s}</li>`).join('')}</ul></td>`).join('')}</tr>
       </table>
