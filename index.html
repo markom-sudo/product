@@ -284,6 +284,20 @@ const ICONS = {
 };
 function icon(name){ return ICONS[name] || ''; }
 
+// Handler global untuk fallback saat <img> gagal dimuat (404/expired/dsb).
+// SENGAJA dipisah jadi fungsi bernama (bukan HTML mentah disisipkan ke
+// dalam atribut onerror="..."), karena SVG ikon mengandung tanda kutip
+// ganda (viewBox="0 0 24 24") yang kalau ditaruh langsung di dalam
+// atribut onerror="..." (juga kutip ganda) akan memutus atribut itu di
+// tengah jalan -- inilah penyebab teks aneh seperti `)">` muncul di
+// kartu kemarin.
+function handleImgError(imgEl, wrapperTag){
+  const div = document.createElement(wrapperTag || 'div');
+  div.className = imgEl.className === 'hero-img' ? 'hero-ph' : 'ph-icon';
+  div.innerHTML = icon('box');
+  imgEl.replaceWith(div);
+}
+
 /* =========================================================
    STATE
    ========================================================= */
@@ -416,7 +430,7 @@ function renderGrid(products){
     const disabled = !compareSet.has(p.id) && compareSet.size >= 3;
     return `
     <div class="card" data-id="${p.id}">
-      ${p.thumbnail ? `<img src="${p.thumbnail}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph-icon',innerHTML:'${icon('box').replace(/'/g, "\\'")}'}))">` : `<div class="ph-icon">${icon('box')}</div>`}
+      ${p.thumbnail ? `<img src="${p.thumbnail}" alt="" loading="lazy" onerror="handleImgError(this)">` : `<div class="ph-icon">${icon('box')}</div>`}
       <button class="cmp-toggle" data-cmp="${p.id}" style="opacity:${disabled?'.35':'1'};color:${compareSet.has(p.id)?'var(--brand)':'var(--text-2)'}">${icon('compare')}</button>
       <div class="overlay">
         <p class="kat">#${p.kategori || 'Produk'}</p>
@@ -498,7 +512,7 @@ function renderDetail(p){
 
   el('view-detail').innerHTML = `
     ${images.length
-      ? `<img id="hero-img" class="hero-img" src="${images[0]}" alt="${p.model}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'hero-ph',innerHTML:'${icon('box').replace(/'/g, "\\'")}'}))">`
+      ? `<img id="hero-img" class="hero-img" src="${images[0]}" alt="${p.model}" onerror="handleImgError(this)">`
       : `<div class="hero-ph">${icon('box')}</div>`}
     ${images.length > 1 ? `<div id="gallery"></div>` : ''}
 
