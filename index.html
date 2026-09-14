@@ -156,6 +156,14 @@
   .link-row a,.link-row button{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 4px;border-radius:9px;background:var(--surface);font-size:11px;text-decoration:none;color:var(--text);}
   .link-row a.disabled{opacity:.35;pointer-events:none;}
 
+  .spec-group{margin-bottom:18px;}
+  .spec-group-title{font-size:14px;font-weight:700;margin:0 0 10px;}
+  .spec-sub{margin-bottom:10px;}
+  .spec-sub-title{font-size:12px;font-weight:600;color:var(--brand);margin:0 0 4px;}
+  .spec-group ul{margin:0;padding-left:16px;font-size:13px;color:var(--text-2);}
+  .spec-group li{margin-bottom:3px;line-height:1.4;}
+  .spec-item-label{color:var(--text);font-weight:500;}
+
   #other-models{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;}
   .other-chip{flex-shrink:0;width:104px;cursor:pointer;border:1px solid var(--border);border-radius:var(--radius);padding:8px;text-align:center;}
   .other-chip .thumb-wrap{position:relative;width:100%;min-height:88px;aspect-ratio:1/1;border-radius:6px;margin-bottom:6px;background:var(--surface);overflow:hidden;}
@@ -516,9 +524,63 @@ async function openDetail(id){
   el('page-title').textContent = p.model;
 }
 
+// Urutan & keyword pencocokan (case-insensitive, substring) terhadap
+// p.spesifikasiDetail[].label. Satu label spek hanya dipakai SEKALI
+// (di sub-bagian pertama yang cocok), supaya tidak dobel muncul.
+const SPEC_GROUPS_CONFIG = [
+  {
+    title: 'Spesifikasi Fisik',
+    subs: [
+      { label: 'Display / Layar', keywords: ['display', 'layar'] },
+      { label: 'Baterai', keywords: ['baterai', 'battery'] },
+      { label: 'Daya', keywords: ['daya', 'power'] },
+      { label: 'Dimensi', keywords: ['dimensi'] },
+      { label: 'Berat', keywords: ['berat'] },
+    ],
+  },
+  {
+    title: 'Spesifikasi Teknis',
+    subs: [
+      { label: 'Kapasitas / Kemampuan', keywords: ['kapasitas', 'kemampuan', 'capacity'] },
+      { label: 'Jangkauan / Rentang / Batas', keywords: ['jangkauan', 'rentang', 'batas', 'range'] },
+      { label: 'Resolusi', keywords: ['resolusi', 'resolution'] },
+    ],
+  },
+];
+
+function buildSpecGroupsHtml_(specDetail){
+  if(!specDetail || !specDetail.length) return '';
+
+  const used = new Set(); // index specDetail yang sudah "diambil" sub-bagian lain
+  const groupsHtml = SPEC_GROUPS_CONFIG.map(group=>{
+    const subsHtml = group.subs.map(sub=>{
+      const matches = [];
+      specDetail.forEach((s, i)=>{
+        if(used.has(i)) return;
+        const labelLower = String(s.label || '').toLowerCase();
+        if(sub.keywords.some(k => labelLower.includes(k))){
+          matches.push(s);
+          used.add(i);
+        }
+      });
+      if(!matches.length) return '';
+      return `
+        <div class="spec-sub">
+          <p class="spec-sub-title">${sub.label}</p>
+          <ul>${matches.map(m=>`<li><span class="spec-item-label">${m.label}</span>: ${m.value}</li>`).join('')}</ul>
+        </div>`;
+    }).join('');
+    if(!subsHtml) return '';
+    return `<div class="spec-group"><p class="spec-group-title">${group.title}</p>${subsHtml}</div>`;
+  }).join('');
+
+  return groupsHtml; // string kosong kalau tidak ada satupun yang cocok
+}
+  
 function renderDetail(p){
   const images = p.gambar && p.gambar.length ? p.gambar : [];
   const useBoxes = p.varian.length <= 4;
+  const specGroupsHtml = buildSpecGroupsHtml_(p.spesifikasiDetail);
 
   el('view-detail').innerHTML = `
     ${images.length
@@ -539,6 +601,8 @@ function renderDetail(p){
       </div>
       <button id="detail-compare-btn" data-id="${p.id}">${icon('compare')}<span>Bandingkan</span></button>
     </div>
+
+    ${specGroupsHtml}
 
     ${p.spesifikasi && p.spesifikasi.length ? `
     <button id="spec-toggle">
@@ -595,7 +659,7 @@ function renderDetail(p){
   }
   priceOut.textContent = rupiah(p.varian[0].harga);
 
-  // spesifikasi accordion
+  // spesifikasi accordion (catatan lama dari kolom O)
   const specToggle = document.getElementById('spec-toggle');
   if(specToggle){
     const list = document.getElementById('spec-list');
