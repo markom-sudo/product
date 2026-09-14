@@ -197,6 +197,16 @@
   #compare-table .thumb-wrap img,#compare-table .thumb-wrap .ph-icon{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:flex;align-items:center;justify-content:center;}
   #compare-table .model-name{font-weight:600;font-size:12px;margin-top:6px;}
   #compare-table ul{margin:0;padding-left:14px;text-align:left;font-size:12px;color:var(--text-2);}
+  #compare-table td.cmp-same{background:#eef9f0;}
+  #compare-table td.cmp-diff{background:#fff5e9;}
+  #compare-table td.cmp-missing{color:var(--text-3);}
+  #compare-table td.cmp-best{font-weight:700;color:var(--brand);}
+  .cmp-tag{display:inline-block;font-size:9px;font-weight:600;background:var(--brand);color:#fff;padding:2px 6px;border-radius:999px;margin-top:3px;}
+  #compare-legend{font-size:12px;color:var(--text-2);margin:0 0 14px;display:flex;gap:16px;}
+  #compare-legend span{display:inline-flex;align-items:center;gap:5px;}
+  #compare-legend i{width:11px;height:11px;border-radius:3px;display:inline-block;}
+  #compare-legend .i-same{background:#eef9f0;border:1px solid #b7e4c0;}
+  #compare-legend .i-diff{background:#fff5e9;border:1px solid #ffcf8a;}
   #compare-empty{text-align:center;color:var(--text-3);padding:48px 0;font-size:14px;}
   #clear-compare{width:100%;margin-top:16px;padding:12px;border-radius:9px;background:var(--surface);font-size:13px;font-weight:600;}
 
@@ -672,6 +682,26 @@ el('modal-confirm').addEventListener('click', ()=>{
 /* =========================================================
    COMPARE VIEW
    ========================================================= */
+function normalizeVal_(v){
+  return String(v == null ? '' : v).trim().toLowerCase();
+}
+
+// Menentukan class tiap sel dalam satu baris perbandingan berdasarkan
+// kesamaan/perbedaan nilainya di antara produk yang dibandingkan.
+function compareCellClasses_(values){
+  const present = values.filter(v => v && v !== '-');
+  if(present.length === 0) return values.map(()=> 'cmp-missing');
+  const uniq = new Set(present.map(normalizeVal_));
+  const semuaSama = uniq.size <= 1 && present.length === values.length;
+  if(semuaSama) return values.map(()=> 'cmp-same');
+  return values.map(v => (!v || v === '-') ? 'cmp-missing' : 'cmp-diff');
+}
+
+function compareRowHtml_(label, values){
+  const classes = compareCellClasses_(values);
+  return `<tr><td class="label">${label}</td>${values.map((v,i)=>`<td class="${classes[i]}">${v}</td>`).join('')}</tr>`;
+}
+
 async function openCompareView(ids){
   switchView('compare', 'Perbandingan', true);
   if(ids.length === 0){
@@ -679,17 +709,58 @@ async function openCompareView(ids){
     return;
   }
   const items = await loadCompare(ids);
-  const rows = [
-    {label:'Kategori', get:m=>m.kategori||'-'},
-    {label:'Harga mulai', get:m=>rupiah(m.hargaMin)},
-    {label:'Jumlah konfigurasi', get:m=>m.varian.length},
-  ];
+
+  // Gabungkan semua label spesifikasi unik dari SEMUA produk yang
+  // dibandingkan, urut sesuai kemunculan pertama -- supaya produk yang
+  // tidak punya label tertentu tetap kebagian baris (selnya "-").
+  const specLabels = [];
+  items.forEach(m=>{
+    (m.spesifikasiDetail || []).forEach(s=>{
+      if(!specLabels.includes(s.label)) specLabels.push(s.label);
+    });
+  });
+  const specRowsHtml = specLabels.map(label=>{
+    const values = items.map(m=>{
+      const found = (m.spesifikasiDetail || []).find(s => s.label === label);
+      return found ? found.value : '-';
+    });
+    return compareRowHtml_(label, values);
+  }).join('');
+
+  // Harga: highlight sel termurah selain highlight sama/beda biasa.
+  const hargaValues = items.map(m => priceRange(m));
+  const hargaClasses = compareCellClasses_(hargaValues);
+  const hargaMinList = items.map(m => m.hargaMin).filter(h => h > 0);
+  const termurah = hargaMinList.length ? Math.min(...hargaMinList) : null;
+  const hargaRowHtml = `<tr><td class="label">Harga</td>${items.map((m,i)=>{
+    const isTermurah = termurah !== null && m.hargaMin === termurah;
+    return `<td class="${hargaClasses[i]}${isTermurah ? ' cmp-best' : ''}">${hargaValues[i]}${isTermurah ? '<br><span class="cmp-tag">Termurah</span>' : ''}</td>`;
+  }).join('')}</tr>`;
+
+  const kategoriValues = items.map(m => m.kategori || '-');
+  const kategoriRowHtml = compareRowHtml_('Kategori', kategoriValues);
+
+  // Kalau ada produk yang belum punya spesifikasi terstruktur sama
+  // sekali (belum diekstrak dari file spek), tetap tampilkan catatan
+  // lama (kolom O) sebagai fallback supaya info tidak hilang.
+  const adaCatatanLama = items.some(m => m.spesifikasi && m.spesifikasi.length);
+  const catatanRowHtml = adaCatatanLama
+    ? `<tr><td class="label">Catatan</td>${items.map(m=>`<td>${(m.spesifikasi||[]).length ? `<ul>${m.spesifikasi.slice(0,4).map(s=>`<li>${s}</li>`).join('')}</ul>` : '-'}</td>`).join('')}</tr>`
+    : '';
+
   el('view-compare').innerHTML = `
+    <div id="compare-legend">
+      <span><i class="i-same"></i> Sama</span>
+      <span><i class="i-diff"></i> Beda</span>
+    </div>
     <div style="overflow-x:auto;">
       <table id="compare-table">
         <tr><th class="label"></th>${items.map(m=>`<th><div class="thumb-wrap">${thumbHtml(m.thumbnail)}</div><p class="model-name">${m.model}</p></th>`).join('')}</tr>
-        ${rows.map(r=>`<tr><td class="label">${r.label}</td>${items.map(m=>`<td>${r.get(m)}</td>`).join('')}</tr>`).join('')}
-        <tr><td class="label">Spesifikasi</td>${items.map(m=>`<td><ul>${(m.spesifikasi||[]).slice(0,4).map(s=>`<li>${s}</li>`).join('')}</ul></td>`).join('')}</tr>
+        ${kategoriRowHtml}
+        ${hargaRowHtml}
+        <tr><td class="label">Jumlah konfigurasi</td>${items.map(m=>`<td>${m.varian.length}</td>`).join('')}</tr>
+        ${specRowsHtml}
+        ${catatanRowHtml}
       </table>
     </div>
     <button id="clear-compare">Kosongkan perbandingan</button>
