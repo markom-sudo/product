@@ -992,6 +992,14 @@ function prefetchThumbs(){
   notifyReady();
   prefetchThumbs();
 })();
+
+// Service worker Katalog: simpan file aplikasi + gambar di perangkat (offline & cepat).
+// sw.js harus ada di folder yang sama dengan index.html ini (repo "product").
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
