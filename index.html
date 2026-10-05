@@ -691,17 +691,45 @@ const SPEC_GROUPS_CONFIG = [
   },
 ];
 
+// Baris spek identik (label + nilai sama) digabung jadi satu. Kalau satu label punya
+// nilai BERBEDA (mis. dua sheet spek memakai nama model yang sama) keduanya tetap
+// tampil, supaya konfliknya kelihatan dan bisa dibereskan di SpesifikasiDetail.
+function dedupeSpec_(list){
+  const seen = new Set(), out = [];
+  (list || []).forEach(s=>{
+    const k = String(s.label || '').trim().toLowerCase() + '||' + String(s.value || '').trim().toLowerCase();
+    if(seen.has(k)) return;
+    seen.add(k);
+    out.push(s);
+  });
+  return out;
+}
+
+// Nilai berformat "a; b; c" -> satu butir per baris
+function specValueHtml_(v){
+  const parts = String(v == null ? '' : v).split(/;\s*/).map(x => x.trim()).filter(Boolean);
+  return parts.join('<br>');
+}
+
+function specLi_(m){
+  return `<li><span class="spec-item-label">${m.label}</span>: ${specValueHtml_(m.value)}</li>`;
+}
+
 function buildSpecGroupsHtml_(specDetail){
-  if(!specDetail || !specDetail.length) return '';
+  const list = dedupeSpec_(specDetail);
+  if(!list.length) return '';
 
   const used = new Set();
-  return SPEC_GROUPS_CONFIG.map(group=>{
+
+  // 1) Kelompok tetap (Fisik / Teknis). Pencocokan memakai bagian label SEBELUM " - ",
+  //    jadi "Penyimpanan - Kapasitas" tetap bersama "Penyimpanan - Format File".
+  let html = SPEC_GROUPS_CONFIG.map(group=>{
     const subsHtml = group.subs.map(sub=>{
       const matches = [];
-      specDetail.forEach((s, i)=>{
+      list.forEach((s, i)=>{
         if(used.has(i)) return;
-        const labelLower = String(s.label || '').toLowerCase();
-        if(sub.keywords.some(k => labelLower.includes(k))){
+        const head = String(s.label || '').split(' - ')[0].toLowerCase();
+        if(sub.keywords.some(k => head.includes(k))){
           matches.push(s);
           used.add(i);
         }
@@ -710,12 +738,33 @@ function buildSpecGroupsHtml_(specDetail){
       return `
         <div class="spec-sub">
           <p class="spec-sub-title">${sub.label}</p>
-          <ul>${matches.map(m=>`<li><span class="spec-item-label">${m.label}</span>: ${m.value}</li>`).join('')}</ul>
+          <ul>${matches.map(specLi_).join('')}</ul>
         </div>`;
     }).join('');
     if(!subsHtml) return '';
     return `<div class="spec-group"><p class="spec-group-title">${group.title}</p>${subsHtml}</div>`;
   }).join('');
+
+  // 2) SEMUA sisanya tetap ditampilkan ("Spesifikasi Lainnya"), dikelompokkan menurut
+  //    awalan label: "Kondisi Pemakaian Normal - Suhu" -> bagian "Kondisi Pemakaian Normal".
+  const umum = [], sections = new Map();
+  list.forEach((s, i)=>{
+    if(used.has(i)) return;
+    const label = String(s.label || '');
+    const idx = label.indexOf(' - ');
+    if(idx < 0){ umum.push(s); return; }
+    const head = label.slice(0, idx).trim();
+    if(!sections.has(head)) sections.set(head, []);
+    sections.get(head).push({ label: label.slice(idx + 3).trim(), value: s.value });
+  });
+  let body = '';
+  if(umum.length) body += `<div class="spec-sub"><ul>${umum.map(specLi_).join('')}</ul></div>`;
+  sections.forEach((items, head)=>{
+    body += `<div class="spec-sub"><p class="spec-sub-title">${head}</p><ul>${items.map(specLi_).join('')}</ul></div>`;
+  });
+  if(body) html += `<div class="spec-group"><p class="spec-group-title">Spesifikasi Lainnya</p>${body}</div>`;
+
+  return html;
 }
 
 function renderDetail(p){
