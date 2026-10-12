@@ -1089,7 +1089,23 @@ function open360(info){
 let mvLoading = null;
 function loadModelViewer(){
   if(window.customElements && customElements.get('model-viewer')) return Promise.resolve();
-  if(!mvLoading) mvLoading = import('./vendor/model-viewer.min.js');
+  if(!mvLoading){
+    // Coba berurutan: berkas lokal -> berkas lokal dengan parameter baru (menghindari salinan gagal yang
+    // tersangkut di cache perangkat) -> CDN (butuh internet). Kegagalan TIDAK diingat, jadi bisa dicoba ulang.
+    const tries = [
+      './vendor/model-viewer.min.js',
+      './vendor/model-viewer.min.js?r=1',
+      'https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js',
+    ];
+    mvLoading = (async () => {
+      let first = null;
+      for(const u of tries){
+        try{ await import(u); return; }
+        catch(e){ if(!first) first = e; }
+      }
+      throw first;
+    })().catch(e => { mvLoading = null; throw e; });
+  }
   return mvLoading;
 }
 
