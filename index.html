@@ -212,6 +212,18 @@
   .cfg-chip{font-size:12px;padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:#fff;text-align:left;line-height:1.3;}
   .cfg-chip.active{background:var(--brand);color:var(--brand-fg);border-color:var(--brand);}
 
+  /* ---------- Viewer 360 / 3D ---------- */
+  .vbtns{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0;}
+  .btn360{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:600;}
+  .v360,.v3d{position:relative;border-radius:var(--radius);overflow:hidden;background:var(--surface);}
+  .v360 canvas{width:100%;height:100%;display:block;cursor:grab;touch-action:pan-y;}
+  .v360-bar{position:absolute;left:0;right:0;bottom:0;padding:8px 12px;font-size:11px;color:var(--text-2);display:flex;gap:10px;align-items:center;background:linear-gradient(transparent,rgba(255,255,255,.92));pointer-events:none;}
+  .v360-prog{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+  .v360-prog i{display:block;height:100%;width:0;background:var(--brand);}
+  .v3d{aspect-ratio:4/3;}
+  .v3d model-viewer{width:100%;height:100%;--poster-color:transparent;}
+  .v3d-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;text-align:center;font-size:13px;color:var(--text-2);}
+
   @media (min-width:640px){
     #grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));}
   }
@@ -777,6 +789,7 @@ function renderDetail(p){
       ? `<img id="hero-img" class="hero-img" src="${p.thumbnail || images[0]}" alt="${p.model}" onerror="handleImgError(this)">`
       : `<div class="hero-ph">${icon('box')}</div>`}
     ${images.length > 1 ? `<div id="gallery"></div>` : ''}
+    ${(info360(p) || info3d(p)) ? `<div class="vbtns">${info360(p) ? '<button class="btn360" id="btn360">⟳ Putar 360°</button>' : ''}${info3d(p) ? '<button class="btn360" id="btn3d">◇ Lihat 3D</button>' : ''}</div>` : ''}
 
     <p class="eyebrow">#${p.kategori || 'Produk'}</p>
     <p class="h-title">${p._famTitle || p.namaDasar}</p>
@@ -835,7 +848,15 @@ function renderDetail(p){
       t.addEventListener('click', ()=>{
         g.querySelectorAll('.thumb').forEach(x=>x.classList.remove('active'));
         t.classList.add('active');
-        document.getElementById('hero-img').src = images[t.dataset.idx];
+        const idx = +t.dataset.idx;
+        const h = document.getElementById('hero-img');
+        if(h){ h.src = images[idx]; }
+        else {                                   // sedang di viewer 360/3D -> kembali ke foto
+          renderDetail(p);
+          const h2 = document.getElementById('hero-img');
+          if(h2) h2.src = images[idx];
+          document.querySelectorAll('#gallery .thumb').forEach((x, i) => x.classList.toggle('active', i === idx));
+        }
       });
     });
   }
@@ -880,6 +901,12 @@ function renderDetail(p){
   document.getElementById('detail-compare-btn').addEventListener('click', ()=> openComparePopup(p.id));
   updateCompareUI();
 
+  // viewer 360 / 3D
+  const b360 = document.getElementById('btn360');
+  if(b360) b360.addEventListener('click', () => open360(info360(p)));
+  const b3d = document.getElementById('btn3d');
+  if(b3d) b3d.addEventListener('click', () => open3d(p, info3d(p)));
+
   // konfigurasi (anggota keluarga yang sama)
   document.querySelectorAll('#cfg-area .cfg-chip').forEach(b=>{
     b.addEventListener('click', ()=>{ if(b.dataset.id !== p.id) swapDetail(b.dataset.id); });
@@ -895,6 +922,142 @@ function renderDetail(p){
         <p class="p2">${priceRange(o)}</p>
       </div>`).join('');
     wrap.querySelectorAll('.other-chip').forEach(c=> c.addEventListener('click', ()=> openDetail(c.dataset.id)));
+  }
+}
+
+/* =========================================================
+   VIEWER FOTO 360° & MODEL 3D (dimuat hanya saat tombolnya ditekan)
+   - 360/index.json : { "SHEET||KODE": { "dir": "...", "n": 24, "w": 4, "h": 3 } }
+   - 3d/index.json  : { "SHEET||KODE": { "file": "....glb" } }
+   ========================================================= */
+let manifest360 = {}, manifest3d = {};
+fetch('360/index.json').then(r => r.ok ? r.json() : {}).then(m => { manifest360 = m || {}; }).catch(() => {});
+fetch('3d/index.json').then(r => r.ok ? r.json() : {}).then(m => { manifest3d = m || {}; }).catch(() => {});
+
+// Cadangan: kalau konfigurasi yang dibuka tidak punya berkas sendiri, pakai milik konfigurasi utama keluarganya.
+function findInfo(man, p){
+  if(man[p.id]) return man[p.id];
+  const f = famMap[p._fam];
+  return (f && man[f.rep.id]) || null;
+}
+const info360 = p => findInfo(manifest360, p);
+
+// 3D disembunyikan di perangkat tanpa WebGL atau dengan RAM sangat kecil.
+const canShow3d = (() => {
+  try {
+    const c = document.createElement('canvas');
+    if(!(c.getContext('webgl2') || c.getContext('webgl'))) return false;
+  } catch(e){ return false; }
+  return (navigator.deviceMemory || 4) >= 2;
+})();
+const info3d = p => canShow3d ? findInfo(manifest3d, p) : null;
+
+// Elemen yang sedang menampilkan "hero" (foto biasa, viewer 360, atau viewer 3D)
+function currentHero(){
+  return document.getElementById('hero-img')
+    || document.querySelector('#view-detail .v360')
+    || document.querySelector('#view-detail .v3d')
+    || document.querySelector('#view-detail .hero-ph');
+}
+
+function open360(info){
+  const old = currentHero();
+  if(!old) return;
+  const n = info.n, wrap = document.createElement('div');
+  wrap.className = 'v360';
+  wrap.style.aspectRatio = (info.w || 4) + '/' + (info.h || 3);
+  wrap.innerHTML = '<canvas></canvas><div class="v360-bar"><span>Geser untuk memutar</span><div class="v360-prog"><i></i></div></div>';
+  old.replaceWith(wrap);
+
+  const cv = wrap.querySelector('canvas'), g = cv.getContext('2d'), bar = wrap.querySelector('.v360-prog i');
+  const imgs = new Array(n);
+  let loaded = 0, angle = 0, vel = 0, drag = false, lastX = 0, lastT = 0, shown = -1, auto = 360;
+  let prev = performance.now(), idle = prev + 1000;
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) idle = Infinity;
+
+  const url = i => '360/' + info.dir + '/' + String(i + 1).padStart(2, '0') + '.webp';
+  const pick = i => {
+    for(let d = 0; d < n; d++){ const a = imgs[(i + d) % n], b = imgs[(i - d + n) % n]; if(a) return a; if(b) return b; }
+    return null;
+  };
+  function draw(force){
+    const i = Math.floor((((angle % 360) + 360) % 360) / (360 / n));
+    const im = pick(i);
+    if(!im || (i === shown && !force)) return;
+    shown = i; g.drawImage(im, 0, 0, cv.width, cv.height);
+  }
+
+  // Urutan muat: frame jarang dulu (tiap n/4) supaya langsung bisa digeser, baru sisanya.
+  const step = Math.max(1, Math.round(n / 4)), order = [], seen = new Set();
+  for(let i = 0; i < n; i += step){ order.push(i); seen.add(i); }
+  for(let i = 0; i < n; i++) if(!seen.has(i)) order.push(i);
+  let next = 0;
+  const pump = () => {
+    if(next >= order.length) return;
+    const i = order[next++], im = new Image();
+    im.onload = () => {
+      imgs[i] = im; loaded++;
+      bar.style.width = (loaded / n * 100) + '%';
+      if(loaded === 1){ cv.width = im.naturalWidth; cv.height = im.naturalHeight; }
+      draw(true); pump();
+    };
+    im.onerror = pump;
+    im.src = url(i);
+  };
+  for(let k = 0; k < 4; k++) pump();
+
+  cv.addEventListener('pointerdown', e => { drag = true; lastX = e.clientX; lastT = performance.now(); vel = 0; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => {
+    if(!drag) return;
+    const now = performance.now(), dx = e.clientX - lastX;
+    angle -= dx * 0.6; vel = -dx * 0.6 / Math.max(1, now - lastT) * 1000;
+    lastX = e.clientX; lastT = now; draw();
+  });
+  const end = () => { if(drag){ drag = false; idle = performance.now() + 2500; } };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+
+  (function loop(now){
+    if(!document.body.contains(cv)) return;            // viewer sudah diganti -> berhenti
+    const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
+    if(!drag){
+      if(Math.abs(vel) > 2){ angle += vel * dt; vel *= Math.pow(0.9, dt * 60); }
+      else if(now > idle){ const d = 36 * dt; angle += d; auto -= d; if(auto <= 0) idle = Infinity; }  // auto-putar hanya satu putaran (hemat baterai)
+      draw();
+    }
+    requestAnimationFrame(loop);
+  })(performance.now());
+}
+
+let mvLoading = null;
+function loadModelViewer(){
+  if(window.customElements && customElements.get('model-viewer')) return Promise.resolve();
+  if(!mvLoading) mvLoading = import('./vendor/model-viewer.min.js');
+  return mvLoading;
+}
+
+async function open3d(p, info){
+  const old = currentHero();
+  if(!old) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'v3d';
+  wrap.innerHTML = '<div class="v3d-load">Memuat model 3D…</div>';
+  old.replaceWith(wrap);
+  try{
+    await loadModelViewer();
+    const mv = document.createElement('model-viewer');
+    mv.setAttribute('src', '3d/' + info.file);
+    if(p.thumbnail) mv.setAttribute('poster', p.thumbnail);
+    mv.setAttribute('camera-controls', '');
+    mv.setAttribute('auto-rotate', '');
+    mv.setAttribute('auto-rotate-delay', '1500');
+    mv.setAttribute('touch-action', 'pan-y');
+    mv.setAttribute('interaction-prompt', 'none');
+    mv.setAttribute('shadow-intensity', '0.5');
+    mv.addEventListener('load', () => { const l = wrap.querySelector('.v3d-load'); if(l) l.remove(); });
+    mv.addEventListener('error', () => { wrap.innerHTML = '<div class="v3d-load">Model 3D tidak bisa dimuat. Periksa koneksi.</div>'; });
+    wrap.appendChild(mv);
+  }catch(e){
+    wrap.innerHTML = '<div class="v3d-load">Model 3D tidak bisa dimuat di perangkat ini.</div>';
   }
 }
 
