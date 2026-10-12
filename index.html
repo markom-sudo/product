@@ -1129,7 +1129,15 @@ async function open3d(p, info){
     mv.setAttribute('interaction-prompt', 'none');
     mv.setAttribute('shadow-intensity', '0.5');
     mv.addEventListener('load', () => { const l = wrap.querySelector('.v3d-load'); if(l) l.remove(); });
-    mv.addEventListener('error', () => { wrap.innerHTML = '<div class="v3d-load">Berkas model tidak bisa dimuat. Periksa 3d/index.json dan nama file .glb.</div>'; });
+    mv.addEventListener('error', ev => {
+      const det = ev && ev.detail && ev.detail.sourceError;
+      console.error('model-viewer:', ev && ev.detail);
+      const d = document.createElement('div');
+      d.className = 'v3d-load';
+      d.textContent = 'Model 3D gagal dimuat atau ditampilkan di perangkat ini' + (det && det.message ? ' [' + det.message + ']' : '') + '. Periksa ukuran file .glb (disarankan di bawah 5 MB).';
+      wrap.innerHTML = '';
+      wrap.appendChild(d);
+    });
     wrap.appendChild(mv);
   }catch(e){
     console.error('open3d:', e);
