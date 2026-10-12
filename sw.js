@@ -8,11 +8,14 @@
  * Setiap aplikasi mendaftarkan sw.js miliknya sendiri; cakupan (scope) otomatis
  * mengikuti lokasinya, dan nama cache dipisah per scope supaya tidak bentrok.
  * Naikkan VERSION untuk memaksa semua perangkat mengambil ulang file. */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SCOPE = self.registration.scope;                       // mis. https://.../product/
 const NS = 'elitech' + new URL(SCOPE).pathname.replace(/[^a-z0-9]+/gi, '_');
 const APP_CACHE = NS + '-app-' + VERSION;
 const IMG_CACHE = NS + '-img-' + VERSION;
+const MEDIA_CACHE = NS + '-media-' + VERSION;                // foto 360, model 3D, library viewer
+const MEDIA_MAX = 500;                                        // batas jumlah berkas media tersimpan
+const MEDIA_PATH = /\/(360|3d|vendor)\//;
 const IMG_MAX = 250;                                          // batas jumlah gambar tersimpan
 
 // Disimpan saat pertama kali online. Sisanya (ikon, manifest, script, dll)
@@ -37,7 +40,7 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys
-        .filter(k => k.startsWith(NS + '-') && k !== APP_CACHE && k !== IMG_CACHE)
+        .filter(k => k.startsWith(NS + '-') && k !== APP_CACHE && k !== IMG_CACHE && k !== MEDIA_CACHE)
         .map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
@@ -50,6 +53,12 @@ self.addEventListener('fetch', e => {
 
   // Data Apps Script tidak disentuh (aplikasi sudah punya cache data sendiri).
   if (url.hostname === 'script.google.com' || url.hostname === 'script.googleusercontent.com') return;
+
+  // Foto 360, model 3D, library viewer: cache-first (berat, jarang berubah). index.json tetap lewat jalur biasa.
+  if (url.origin === self.location.origin && MEDIA_PATH.test(url.pathname) && !/index\.json$/.test(url.pathname)) {
+    e.respondWith(cacheFirstMedia(req));
+    return;
+  }
 
   if (IMG_HOST.test(url.hostname)) {
     e.respondWith(cacheFirstImage(req));
@@ -100,5 +109,22 @@ async function trimCache(cache, max) {
   const keys = await cache.keys();
   if (keys.length > max) {
     await Promise.all(keys.slice(0, keys.length - max).map(k => cache.delete(k)));
+  }
+}
+
+// Media berat: ambil dari cache dulu; kalau belum ada, unduh lalu simpan (hanya respons penuh 200).
+async function cacheFirstMedia(req) {
+  const cache = await caches.open(MEDIA_CACHE);
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  try {
+    const res = await fetch(req);
+    if (res && res.ok && res.status === 200) {
+      await cache.put(req, res.clone());
+      trimCache(cache, MEDIA_MAX);
+    }
+    return res;
+  } catch (err) {
+    return Response.error();
   }
 }
