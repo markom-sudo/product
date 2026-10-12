@@ -1054,10 +1054,15 @@ async function open3d(p, info){
     mv.setAttribute('interaction-prompt', 'none');
     mv.setAttribute('shadow-intensity', '0.5');
     mv.addEventListener('load', () => { const l = wrap.querySelector('.v3d-load'); if(l) l.remove(); });
-    mv.addEventListener('error', () => { wrap.innerHTML = '<div class="v3d-load">Model 3D tidak bisa dimuat. Periksa koneksi.</div>'; });
+    mv.addEventListener('error', () => { wrap.innerHTML = '<div class="v3d-load">Berkas model tidak bisa dimuat. Periksa 3d/index.json dan nama file .glb.</div>'; });
     wrap.appendChild(mv);
   }catch(e){
-    wrap.innerHTML = '<div class="v3d-load">Model 3D tidak bisa dimuat di perangkat ini.</div>';
+    console.error('open3d:', e);
+    const d = document.createElement('div');
+    d.className = 'v3d-load';
+    d.textContent = 'Library 3D belum terpasang atau rusak (vendor/model-viewer.min.js)' + (e && e.message ? ' [' + e.message + ']' : '');
+    wrap.innerHTML = '';
+    wrap.appendChild(d);
   }
 }
 
