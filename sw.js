@@ -96,8 +96,7 @@ async function cacheFirstImage(req) {
   try {
     const res = await fetch(req);
     if (res && (res.ok || res.type === 'opaque')) {
-      await cache.put(req, res.clone());
-      trimCache(cache, IMG_MAX);
+      try { await cache.put(req, res.clone()); trimCache(cache, IMG_MAX); } catch (err) { /* kuota penuh dsb: abaikan, respons tetap dikirim */ }
     }
     return res;
   } catch (err) {
@@ -120,8 +119,7 @@ async function cacheFirstMedia(req) {
   try {
     const res = await fetch(req);
     if (res && res.ok && res.status === 200) {
-      await cache.put(req, res.clone());
-      trimCache(cache, MEDIA_MAX);
+      try { await cache.put(req, res.clone()); trimCache(cache, MEDIA_MAX); } catch (err) { /* kuota penuh dsb: abaikan, respons tetap dikirim */ }
     }
     return res;
   } catch (err) {
