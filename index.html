@@ -413,7 +413,7 @@ function lev(a, b){
 
 // Pengelompokan varian: nama model dipotong di kata konfigurasi pertama
 // ("SONOTRAX MED-01 WITH TROLLEY UPS" -> induk "SONOTRAX MED-01", konfigurasi "WITH TROLLEY UPS").
-const CONFIG_SPLIT = /\s+(?:STANDARD\b|LITE\b|WITH\b|W\/|\+|\d+\s*FHR)/i;
+const CONFIG_SPLIT = /\s+(?:BASIC\b|STANDARD\b|LITE\b|WITH\b|W\/|\+|\d+\s*FHR)/i;
 const cleanName = s => String(s || '').replace(/\s+/g, ' ').trim();
 
 function buildFamilyMeta(f){
