@@ -816,16 +816,19 @@ function buildSpecGroupsHtml_(specDetail){
 /* =========================================================
    SLIDER FOTO PRODUK
    - geser kiri/kanan, ganti otomatis tiap 4 detik
-   - zoom pelan 1 -> 1.3 selama 4 detik di tiap gambar (CSS .hs-slide.active img)
+   - zoom pelan 1 -> 1.1 selama 4 detik di tiap gambar (CSS .hs-slide.active img)
+   - ada interaksi (sentuh/geser/klik titik/thumbnail) -> zoom & ganti otomatis berhenti;
+     setelah IDLE_MS (8 detik) tanpa interaksi -> jalan lagi
    ========================================================= */
 function initHeroSlider(root){
   const track = root.querySelector('.hs-track');
   const slides = [...root.querySelectorAll('.hs-slide')];
   const dots = [...root.querySelectorAll('.hs-dot')];
   const n = slides.length;
-  const AUTO_MS = 4000;
+  const AUTO_MS = 4000;     // jeda ganti gambar otomatis (samakan dengan durasi zoom di CSS)
+  const IDLE_MS = 8000;     // diam selama ini setelah interaksi -> zoom & ganti otomatis jalan lagi
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let idx = 0, timer = null, dragging = false, decided = false;
+  let idx = 0, timer = null, idleTimer = null, manual = false, dragging = false, decided = false;
   let startX = 0, startY = 0, startT = 0, dx = 0, w = 1;
 
   function place(animate, extra){
@@ -842,10 +845,33 @@ function initHeroSlider(root){
     dots.forEach((d, k) => d.classList.toggle('active', k === idx));
     if(typeof root._onChange === 'function') root._onChange(idx);
   }
-  function restart(){
+  function restart(delay){
     clearTimeout(timer);
-    if(n < 2 || reduce) return;
-    timer = setTimeout(tick, AUTO_MS);
+    if(manual || n < 2 || reduce) return;                           // mode manual: tidak ada ganti otomatis
+    timer = setTimeout(tick, delay == null ? AUTO_MS : delay);
+  }
+  // Ada interaksi: hentikan zoom (dibekukan) dan ganti otomatis, lalu mulai hitung mundur idle.
+  function userTouched(){
+    manual = true;
+    root.classList.add('paused');
+    clearTimeout(timer);
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(resumeAuto, IDLE_MS);
+  }
+  // Idle sudah cukup lama: zoom lanjut dan ganti otomatis jalan lagi.
+  function resumeAuto(){
+    if(!document.body.contains(root)) return;
+    if(dragging){ idleTimer = setTimeout(resumeAuto, IDLE_MS); return; }
+    manual = false;
+    root.classList.remove('paused');
+    // sisa waktu zoom pada gambar aktif, supaya pergantian tetap pas di puncak zoom
+    let left = AUTO_MS;
+    try{
+      const img = slides[idx].querySelector('img');
+      const a = img && img.getAnimations && img.getAnimations()[0];
+      if(a && a.currentTime != null) left = Math.max(300, AUTO_MS - Number(a.currentTime));
+    }catch(_){}
+    restart(left);
   }
   function goTo(i, instant){
     idx = Math.max(0, Math.min(n - 1, i));
@@ -855,6 +881,7 @@ function initHeroSlider(root){
   }
   function tick(){
     if(!document.body.contains(root)) return;                      // detail sudah diganti -> berhenti
+    if(manual) return;
     if(dragging || document.hidden || root.offsetParent === null){ restart(); return; }
     if(idx < n - 1){ goTo(idx + 1); return; }
     // dari gambar terakhir kembali ke pertama: fade, bukan menyapu semua slide
@@ -870,7 +897,9 @@ function initHeroSlider(root){
   }
 
   root.addEventListener('pointerdown', e => {
-    if(n < 2 || (e.pointerType === 'mouse' && e.button !== 0) || e.target.closest('.hs-dot')) return;
+    if(e.pointerType === 'mouse' && e.button !== 0) return;
+    userTouched();                                                 // sentuhan apa pun = interaksi
+    if(n < 2 || e.target.closest('.hs-dot')) return;
     dragging = true; decided = false; dx = 0;
     startX = e.clientX; startY = e.clientY; startT = performance.now();
     w = root.clientWidth || 1;
@@ -893,19 +922,20 @@ function initHeroSlider(root){
   function endDrag(cancelled){
     if(!dragging) return;
     dragging = false;
-    if(!decided) return;                                           // cuma tap
-    root.classList.remove('paused');
+    if(!decided){ userTouched(); return; }                         // cuma tap: mulai hitung idle dari sekarang
     const v = dx / Math.max(1, performance.now() - startT);
     let target = idx;
     if(!cancelled && (Math.abs(dx) > w * 0.2 || Math.abs(v) > 0.5)) target = dx < 0 ? idx + 1 : idx - 1;
+    userTouched();                                                 // hitung idle dari saat jari dilepas
     goTo(target);
   }
   root.addEventListener('pointerup', () => endDrag(false));
   root.addEventListener('pointercancel', () => endDrag(true));
 
-  dots.forEach(d => d.addEventListener('click', () => goTo(+d.dataset.i)));
+  dots.forEach(d => d.addEventListener('click', () => { userTouched(); goTo(+d.dataset.i); }));
 
-  root._goTo = goTo;
+  // dipakai thumbnail galeri: klik thumbnail juga dihitung interaksi
+  root._goTo = (i, instant) => { userTouched(); goTo(i, instant); };
   place(false);
   restart();
 }
