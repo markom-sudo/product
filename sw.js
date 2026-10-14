@@ -8,7 +8,7 @@
  * Setiap aplikasi mendaftarkan sw.js miliknya sendiri; cakupan (scope) otomatis
  * mengikuti lokasinya, dan nama cache dipisah per scope supaya tidak bentrok.
  * Naikkan VERSION untuk memaksa semua perangkat mengambil ulang file. */
-const VERSION = 'v5';
+const VERSION = 'v6';
 const SCOPE = self.registration.scope;                       // mis. https://.../product/
 const NS = 'elitech' + new URL(SCOPE).pathname.replace(/[^a-z0-9]+/gi, '_');
 const APP_CACHE = NS + '-app-' + VERSION;
