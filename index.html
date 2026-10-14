@@ -324,6 +324,12 @@
   #compare-table td,#compare-table th{font-size:14px;padding:10px 12px;}
   #clear-compare{max-width:320px;display:block;margin:20px auto 0;}
 }
+
+.f-cat span{text-align:left;padding-right:8px;line-height:1.3;}
+.f-cat b{flex-shrink:0;}
+.f-more{display:flex;align-items:center;gap:6px;margin-top:4px;padding:8px 10px;font-size:12.5px;font-weight:600;color:var(--brand);}
+.f-more svg{transition:transform .3s;}
+.f-more.open svg{transform:rotate(180deg);}
 </style>
 </head>
 <body>
@@ -565,7 +571,38 @@ function buildFamilyMeta(f){
   ms.forEach(m => { m._famTitle = f.title; });
 }
 
+// Singkatan kode kategori -> nama lengkap. Kategori yang tidak ada di daftar (mis. "RGB") dibiarkan apa adanya.
+const CAT_NAMES = {
+  AK:  'ANTROPOMETRI KIT',
+  AR:  'PORTABLE AIR COMPRESSOR',
+  AS:  'AIR STERILIZER & PURIFIER',
+  BP:  'BLOOD PRESSURE & SPO2 MONITOR',
+  DU:  'DENTAL UNIT',
+  EC:  'ELECTROCARDIOGRAPH',
+  FT:  'FETAL DOPPLER & FETAL MONITOR',
+  FV:  'X-RAY FILM VIEWER',
+  IC:  'INFANT CARE',
+  IS:  'INFUSION & SYRINGE PUMP',
+  LE:  'LAMPU OPERASI DAN PERIKSA',
+  NB:  'NEBULIZER',
+  OC:  'OXYGEN CONCENTRATOR',
+  OX:  'PULSE OXIMETER',
+  PM:  'PATIENT MONITOR',
+  SP:  'SPIROMETER',
+  ST:  'STERILISATOR & UV STERILIZER',
+  SM:  'SUCTION MACHINE',
+  TM:  'THERMOMETER',
+  US:  'ULTRASONOGRAPH (USG)',
+  ACS: 'AKSESORIS',
+  NST: 'SIMULATOR',
+};
+function catLabel(k){
+  const s = String(k || '').trim();
+  return CAT_NAMES[s.toUpperCase()] || s;
+}
+
 function indexProduct(p){
+  p.kategori = catLabel(p.kategori || p.kodePrefix || '');   // singkatan -> nama lengkap (ikut terbaca pencarian)
   const kws = String(p.kata || '').split(/[;\n]/).map(s => s.trim()).filter(Boolean);
   p._kw     = kws.map(compact).filter(Boolean);
   p._hay    = compact([p.namaDasar, p.model, p.kategori, p.kode].join(' '));
@@ -696,8 +733,12 @@ function setCategory(c){
   refreshGrid();
 }
 
+let catsOpen = false;     // daftar kategori di sidebar: ringkas / lengkap
+const CAT_LIMIT = 6;      // jumlah kategori yang tampil saat ringkas
+
 function renderChips(){
-  const cats = [...new Set(masterProducts.map(p => p.kategori).filter(Boolean))];
+  const cats = [...new Set(masterProducts.map(p => p.kategori).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
   const all = ['semua', ...cats];
 
   // chip horizontal (HP & tablet)
@@ -708,16 +749,26 @@ function renderChips(){
     btn.addEventListener('click', () => setCategory(btn.dataset.cat));
   });
 
-  // daftar kategori di sidebar (PC), lengkap dengan jumlah produk
+  // daftar kategori di sidebar (PC): ringkas dulu, lengkap kalau diminta
   const count = c => new Set(
     masterProducts.filter(p => c === 'semua' || p.kategori === c).map(p => p._fam)
   ).size;
-  el('f-cats').innerHTML = all.map(c =>
-    `<button class="f-cat ${c === activeCategory ? 'active' : ''}" data-cat="${c}"><span>${c === 'semua' ? 'Semua' : c}</span><b>${count(c)}</b></button>`
-  ).join('');
+  let shown = cats;
+  if(!catsOpen && cats.length > CAT_LIMIT){
+    shown = cats.slice(0, CAT_LIMIT);
+    if(activeCategory !== 'semua' && !shown.includes(activeCategory)) shown.push(activeCategory);
+  }
+  const row = c =>
+    `<button class="f-cat ${c === activeCategory ? 'active' : ''}" data-cat="${c}"><span>${c === 'semua' ? 'Semua' : c}</span><b>${count(c)}</b></button>`;
+  el('f-cats').innerHTML = row('semua') + shown.map(row).join('') +
+    (cats.length > CAT_LIMIT
+      ? `<button class="f-more ${catsOpen ? 'open' : ''}" id="f-more">${catsOpen ? 'Sembunyikan' : 'Lihat semua (' + cats.length + ')'}${icon('chevron')}</button>`
+      : '');
   el('f-cats').querySelectorAll('.f-cat').forEach(btn => {
     btn.addEventListener('click', () => setCategory(btn.dataset.cat));
   });
+  const more = el('f-more');
+  if(more) more.addEventListener('click', () => { catsOpen = !catsOpen; renderChips(); });
 
   // batas slider harga mengikuti harga termahal di data
   const maxHarga = Math.max(0, ...masterProducts.map(p => p.hargaMin || 0));
