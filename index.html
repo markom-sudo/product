@@ -255,6 +255,75 @@
   @media (min-width:640px){
     #grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));}
   }
+  /* ================= FILTER & LAYOUT PC ================= */
+#filters,#result-bar,#active-filters{display:none;}
+.fg{margin:0 0 18px;padding:0 0 18px;border-bottom:1px solid var(--border);}
+.fg h4{font-size:14px;font-weight:700;margin:0 0 10px;}
+.f-cat{display:flex;width:100%;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:9px;font-size:13px;color:var(--text-2);text-align:left;transition:background .2s,color .2s;}
+.f-cat:hover{background:var(--surface);}
+.f-cat.active{background:var(--brand-soft);color:var(--brand);font-weight:600;}
+.f-cat b{font-weight:500;font-size:12px;}
+.fchk{display:flex;align-items:center;gap:10px;padding:6px 2px;font-size:13px;color:var(--text-2);cursor:pointer;}
+.fchk input{width:16px;height:16px;margin:0;accent-color:var(--brand);}
+#f-price{width:100%;accent-color:var(--brand);}
+.price-lbl{display:flex;justify-content:space-between;font-size:12px;color:var(--text-3);margin-top:4px;}
+#f-reset{width:100%;padding:10px;border-radius:9px;background:var(--surface);font-size:13px;font-weight:600;}
+#result-bar{align-items:center;gap:12px;margin-bottom:12px;font-size:13px;color:var(--text-2);}
+#f-sort{margin-left:auto;border:1px solid var(--border);background:#fff;border-radius:9px;padding:8px 12px;font-size:13px;color:var(--text);}
+#active-filters{flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;}
+#active-filters:empty{display:none;}
+.af-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:var(--brand);color:var(--brand-fg);font-size:12px;}
+.af-chip svg{width:12px;height:12px;}
+.af-clear{font-size:12px;color:var(--brand);text-decoration:underline;}
+
+@media (min-width:900px){
+  .container{max-width:1360px;padding:0 32px 64px;}
+  #topbar-inner{max-width:1360px;padding:10px 32px;}
+  #page-title{opacity:1 !important;font-size:17px;}
+  /* search selalu terbuka di PC */
+  #search-wrap{width:380px !important;}
+  #search-input{padding:0 4px 0 16px !important;}
+
+  /* ---- Daftar produk: sidebar filter + grid ---- */
+  #view-grid.active{display:grid;grid-template-columns:250px minmax(0,1fr);column-gap:36px;align-items:start;}
+  #category-banner{grid-column:1 / -1;}
+  #chips{display:none;}
+  #filters{display:block;position:sticky;top:76px;margin-top:20px;max-height:calc(100vh - 96px);overflow-y:auto;padding-right:6px;}
+  #grid-main{margin-top:20px;min-width:0;}
+  #result-bar{display:flex;}
+  #active-filters{display:flex;}
+  #grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:22px 20px;}
+  .card{transition:transform .35s cubic-bezier(.4,0,.2,1),box-shadow .35s;}
+  .card:hover{transform:translateY(-3px);box-shadow:0 12px 26px rgba(20,21,26,.14);}
+  .card .overlay .nama{font-size:13px;}
+
+  /* ---- Detail: foto kiri, info kanan ---- */
+  #view-detail.active{display:grid;grid-template-columns:minmax(0,480px) minmax(0,1fr);gap:56px;align-items:start;margin-top:24px;}
+  .d-left{position:sticky;top:76px;}
+  .d-left .hero-slider,.d-left .hero-ph{max-height:calc(100vh - 250px);min-height:320px;}
+  .d-right{max-width:780px;}
+  .d-right > .eyebrow:first-child{margin-top:0;}
+  .h-title{font-size:28px;}
+  .h-sub{font-size:15px;}
+  .price-row .val{font-size:28px;}
+  .cfg-chip{font-size:13px;}
+  .link-row{max-width:440px;}
+  .link-row a{flex-direction:row;justify-content:center;gap:8px;font-size:13px;padding:12px;transition:background .2s,color .2s;}
+  .link-row a:hover{background:var(--brand-soft);color:var(--brand);}
+  #other-models{flex-wrap:wrap;}
+  .other-chip{width:140px;}
+
+  /* ---- Popup bandingkan: di tengah layar ---- */
+  #modal-overlay{align-items:center;}
+  #modal{border-radius:20px;max-width:560px;max-height:76vh;}
+
+  /* ---- Halaman perbandingan ---- */
+  #compare-table td.label,#compare-table th.label{width:190px;font-size:13px;}
+  #compare-table th{min-width:230px;}
+  #compare-table th .thumb-wrap{width:96px;height:96px;}
+  #compare-table td,#compare-table th{font-size:14px;padding:10px 12px;}
+  #clear-compare{max-width:320px;display:block;margin:20px auto 0;}
+}
 </style>
 </head>
 <body>
@@ -284,14 +353,49 @@
       <div class="icons" id="banner-icons"></div>
     </div>
 
-    <div id="chips"></div>
+    <aside id="filters">
+      <div class="fg">
+        <h4>Kategori</h4>
+        <div id="f-cats"></div>
+      </div>
+      <div class="fg">
+        <h4>Harga mulai dari</h4>
+        <input type="range" id="f-price" min="0" max="100000000" step="1000000" value="100000000">
+        <div class="price-lbl"><span>Rp 0</span><span id="f-price-val">Semua</span></div>
+      </div>
+      <div class="fg">
+        <h4>Kelengkapan</h4>
+        <label class="fchk"><input type="checkbox" data-flag="brosur">Ada brosur</label>
+        <label class="fchk"><input type="checkbox" data-flag="nie">Ada NIE</label>
+        <label class="fchk"><input type="checkbox" data-flag="inaproc">Ada link Inaproc</label>
+        <label class="fchk"><input type="checkbox" data-flag="spek">Ada spesifikasi detail</label>
+        <label class="fchk"><input type="checkbox" data-flag="v360">Ada foto 360°</label>
+        <label class="fchk"><input type="checkbox" data-flag="v3d">Ada model 3D</label>
+      </div>
+      <button id="f-reset">Reset filter</button>
+    </aside>
 
-    <div id="compare-bar">
-      <span id="compare-count"></span>
-      <button id="compare-view-btn">Lihat perbandingan</button>
+    <div id="grid-main">
+      <div id="chips"></div>
+
+      <div id="result-bar">
+        <span id="result-count"></span>
+        <select id="f-sort">
+          <option value="default">Urutan default</option>
+          <option value="name">Nama A–Z</option>
+          <option value="low">Harga terendah</option>
+          <option value="high">Harga tertinggi</option>
+        </select>
+      </div>
+      <div id="active-filters"></div>
+
+      <div id="compare-bar">
+        <span id="compare-count"></span>
+        <button id="compare-view-btn">Lihat perbandingan</button>
+      </div>
+
+      <div id="grid"></div>
     </div>
-
-    <div id="grid"></div>
   </div>
 
   <div id="view-detail" class="view"></div>
@@ -566,18 +670,170 @@ function pushNav(state){
 /* =========================================================
    GRID
    ========================================================= */
+/* =========================================================
+   FILTER (sidebar PC) + KATEGORI
+   ========================================================= */
+let priceLimit = null;            // null = semua harga
+const activeFlags = new Set();    // 'brosur','nie','inaproc','spek','v360','v3d'
+let sortMode = 'default';
+
+const FLAG_LABEL = {
+  brosur: 'Ada brosur', nie: 'Ada NIE', inaproc: 'Ada Inaproc',
+  spek: 'Ada spesifikasi', v360: 'Ada 360°', v3d: 'Ada 3D',
+};
+const FLAG_TESTS = {
+  brosur:  p => !!(p.links && p.links[0]),
+  nie:     p => !!(p.links && p.links[1]),
+  inaproc: p => !!(p.links && p.links[2]),
+  spek:    p => !!(p.spesifikasiDetail && p.spesifikasiDetail.length),
+  v360:    p => !!findInfo(manifest360, p),
+  v3d:     p => !!findInfo(manifest3d, p),
+};
+
+function setCategory(c){
+  activeCategory = c;
+  renderChips();
+  refreshGrid();
+}
+
 function renderChips(){
-  const cats = ['semua', ...new Set(masterProducts.map(p=>p.kategori).filter(Boolean))];
-  el('chips').innerHTML = cats.map(c=>
-    `<button class="chip ${c===activeCategory?'active':''}" data-cat="${c}">${c==='semua'?'Semua':c}</button>`
+  const cats = [...new Set(masterProducts.map(p => p.kategori).filter(Boolean))];
+  const all = ['semua', ...cats];
+
+  // chip horizontal (HP & tablet)
+  el('chips').innerHTML = all.map(c =>
+    `<button class="chip ${c === activeCategory ? 'active' : ''}" data-cat="${c}">${c === 'semua' ? 'Semua' : c}</button>`
   ).join('');
-  el('chips').querySelectorAll('.chip').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      activeCategory = btn.dataset.cat;
-      renderChips();
+  el('chips').querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => setCategory(btn.dataset.cat));
+  });
+
+  // daftar kategori di sidebar (PC), lengkap dengan jumlah produk
+  const count = c => new Set(
+    masterProducts.filter(p => c === 'semua' || p.kategori === c).map(p => p._fam)
+  ).size;
+  el('f-cats').innerHTML = all.map(c =>
+    `<button class="f-cat ${c === activeCategory ? 'active' : ''}" data-cat="${c}"><span>${c === 'semua' ? 'Semua' : c}</span><b>${count(c)}</b></button>`
+  ).join('');
+  el('f-cats').querySelectorAll('.f-cat').forEach(btn => {
+    btn.addEventListener('click', () => setCategory(btn.dataset.cat));
+  });
+
+  // batas slider harga mengikuti harga termahal di data
+  const maxHarga = Math.max(0, ...masterProducts.map(p => p.hargaMin || 0));
+  const maxP = Math.max(1e6, Math.ceil(maxHarga / 1e6) * 1e6);
+  const pr = el('f-price');
+  pr.max = maxP;
+  pr.step = 1e6;
+  if(priceLimit === null) pr.value = maxP;
+}
+
+function refreshGrid(){
+  let list = masterProducts;
+  if (activeCategory !== 'semua') list = list.filter(p => p.kategori === activeCategory);
+  if (priceLimit !== null) list = list.filter(p => (p.hargaMin || 0) <= priceLimit);
+  if (activeFlags.size){
+    const tests = [...activeFlags].map(f => FLAG_TESTS[f]);
+    list = list.filter(p => tests.every(t => t(p)));
+  }
+
+  const q = searchTerm.trim();
+  if (q){
+    let r = list.map(p => ({ p, s: matchScore(p, q, false) })).filter(x => x.s > 0);
+    if (!r.length && tokens(q).length > 1)   // tidak ada yang cocok penuh -> longgarkan
+      r = list.map(p => ({ p, s: matchScore(p, q, true) })).filter(x => x.s > 0);
+    list = r.sort((a, b) => b.s - a.s).map(x => x.p);
+  }
+
+  if (sortMode !== 'default'){
+    const harga = p => p.hargaMin > 0 ? p.hargaMin : 1e15;   // harga kosong selalu di akhir
+    list = [...list];
+    if (sortMode === 'name') list.sort((a, b) => String(a._famTitle).localeCompare(String(b._famTitle)));
+    if (sortMode === 'low')  list.sort((a, b) => harga(a) - harga(b));
+    if (sortMode === 'high') list.sort((a, b) => (b.hargaMin || 0) - (a.hargaMin || 0));
+  }
+
+  allProducts = list;
+  renderGrid(list);
+  updateResultBar();
+}
+
+function updateResultBar(){
+  const fams = new Set(allProducts.map(p => p._fam)).size;
+  el('result-count').textContent = fams + ' produk ditemukan';
+
+  const hargaTxt = priceLimit === null ? 'Semua' : '≤ Rp ' + Math.round(priceLimit / 1e6) + ' jt';
+  el('f-price-val').textContent = hargaTxt;
+
+  const chips = [];
+  if (activeCategory !== 'semua') chips.push(['cat', activeCategory]);
+  if (priceLimit !== null) chips.push(['price', 'Harga ' + hargaTxt]);
+  activeFlags.forEach(f => chips.push(['flag:' + f, FLAG_LABEL[f]]));
+  el('active-filters').innerHTML = chips.length
+    ? chips.map(c => `<button class="af-chip" data-rm="${c[0]}">${c[1]}${icon('close')}</button>`).join('')
+      + '<button class="af-clear" data-rm="all">Hapus semua</button>'
+    : '';
+}
+
+function syncFlagBoxes(){
+  document.querySelectorAll('#filters [data-flag]').forEach(cb => { cb.checked = activeFlags.has(cb.dataset.flag); });
+}
+
+function resetFilters(){
+  activeCategory = 'semua';
+  priceLimit = null;
+  activeFlags.clear();
+  sortMode = 'default';
+  el('f-sort').value = 'default';
+  el('f-price').value = el('f-price').max;
+  syncFlagBoxes();
+  renderChips();
+  refreshGrid();
+}
+
+function bindFilters(){
+  el('f-price').addEventListener('input', e => {
+    const v = +e.target.value;
+    priceLimit = v >= +e.target.max ? null : v;
+    refreshGrid();
+  });
+  document.querySelectorAll('#filters [data-flag]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if(cb.checked) activeFlags.add(cb.dataset.flag); else activeFlags.delete(cb.dataset.flag);
       refreshGrid();
     });
   });
+  el('f-sort').addEventListener('change', e => { sortMode = e.target.value; refreshGrid(); });
+  el('f-reset').addEventListener('click', resetFilters);
+  el('active-filters').addEventListener('click', e => {
+    const b = e.target.closest('[data-rm]');
+    if(!b) return;
+    const k = b.dataset.rm;
+    if(k === 'all') return resetFilters();
+    if(k === 'cat') activeCategory = 'semua';
+    else if(k === 'price'){ priceLimit = null; el('f-price').value = el('f-price').max; }
+    else if(k.startsWith('flag:')){ activeFlags.delete(k.slice(5)); syncFlagBoxes(); }
+    renderChips();
+    refreshGrid();
+  });
+}
+
+/* =========================================================
+   DETAIL: bagi jadi 2 kolom (foto kiri, info kanan).
+   Di HP kedua pembungkus ini tidak punya gaya, jadi tampilan sama seperti sebelumnya.
+   ========================================================= */
+function wrapDetailColumns(){
+  const v = el('view-detail');
+  const left = document.createElement('div');
+  const right = document.createElement('div');
+  left.className = 'd-left';
+  right.className = 'd-right';
+  let inRight = false;
+  [...v.children].forEach(k => {
+    if(k.classList.contains('eyebrow')) inRight = true;   // .eyebrow pertama = kategori, awal kolom info
+    (inRight ? right : left).appendChild(k);
+  });
+  v.append(left, right);
 }
 
 function renderGrid(products){
@@ -623,19 +879,6 @@ function renderGrid(products){
   });
 }
 
-function refreshGrid(){
-  let list = masterProducts;
-  if (activeCategory !== 'semua') list = list.filter(p => p.kategori === activeCategory);
-  const q = searchTerm.trim();
-  if (q){
-    let r = list.map(p => ({ p, s: matchScore(p, q, false) })).filter(x => x.s > 0);
-    if (!r.length && tokens(q).length > 1)   // tidak ada yang cocok penuh -> longgarkan
-      r = list.map(p => ({ p, s: matchScore(p, q, true) })).filter(x => x.s > 0);
-    list = r.sort((a, b) => b.s - a.s).map(x => x.p);
-  }
-  allProducts = list;
-  renderGrid(list);
-}
 
 /* =========================================================
    COMPARE (state global dipakai grid + detail + modal)
@@ -1002,7 +1245,7 @@ function renderDetail(p){
     <div id="other-models"></div>
     ` : ''}
   `;
-
+ wrapDetailColumns();
   // slider: thumbnail kecil tampil dulu, gambar besar dimuat di belakang layar lalu menggantikannya
   const heroEl = document.getElementById('hero-img');
   if(heroEl && heroEl.classList.contains('hero-slider')){
@@ -1521,7 +1764,8 @@ function prefetchThumbs(){
   };
   (window.requestIdleCallback || (f => setTimeout(f, 1500)))(next);
 }
-
+  
+bindFilters();
 (async function init(){
   // 1) Ada cache -> grid tampil SEKETIKA, tanpa menunggu server.
   const cached = cacheRead();
