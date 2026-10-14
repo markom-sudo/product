@@ -330,6 +330,14 @@
 .f-more{display:flex;align-items:center;gap:6px;margin-top:4px;padding:8px 10px;font-size:12.5px;font-weight:600;color:var(--brand);}
 .f-more svg{transition:transform .3s;}
 .f-more.open svg{transform:rotate(180deg);}
+
+/* ---------- Best price ---------- */
+.badge-best{position:absolute;top:8px;left:8px;z-index:2;background:var(--brand);color:var(--brand-fg);font-size:10px;font-weight:700;padding:3px 9px;border-radius:999px;box-shadow:0 1px 4px rgba(20,21,26,.18);}
+.card .badge.low{top:34px;}
+.price-pill{position:absolute;left:8px;bottom:calc(26% + 8px);background:#fff;color:var(--brand);font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;box-shadow:0 1px 4px rgba(20,21,26,.18);}
+.best-more{grid-column:1/-1;padding:12px;border-radius:var(--radius);background:var(--brand-soft);color:var(--brand);font-size:13px;font-weight:600;}
+.bp-line{margin:4px 0 0;font-size:13px;font-weight:600;color:var(--brand);}
+.bp-tag{display:inline-block;background:var(--brand);color:var(--brand-fg);font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;margin-right:6px;}
 </style>
 </head>
 <body>
@@ -470,7 +478,9 @@ let gridScroll = 0;        // posisi scroll grid, dipulihkan saat kembali
 let allProducts = [];      // hasil filter/pencarian yang sedang tampil di grid
 let activeCategory = 'semua';
 let searchTerm = '';
-let compareSet = new Set();
+let compareSet = new Set(); 
+const BEST_LIMIT = 8;      // jumlah produk best price yang tampil sebelum "lihat lainnya"
+let bestExpanded = false;
 let modalConfirmTargetId = null;
 
 const el = id => document.getElementById(id);
@@ -568,6 +578,8 @@ function buildFamilyMeta(f){
   f.min = mins.length ? Math.min(...mins) : 0;
   f.max = maxs.length ? Math.max(...maxs) : 0;
   f.thumb = f.rep.thumbnail || (ms.find(m => m.thumbnail) || {}).thumbnail || '';
+  const bests = ms.map(m => m.hargaBest).filter(h => h > 0);
+  f.best = bests.length ? Math.min(...bests) : 0;
   ms.forEach(m => { m._famTitle = f.title; });
 }
 
@@ -602,6 +614,7 @@ function catLabel(k){
 }
 
 function indexProduct(p){
+  p.hargaBest = Number(p.hargaBest) || 0;
   p.kategori = catLabel(p.kategori || p.kodePrefix || '');   // singkatan -> nama lengkap (ikut terbaca pencarian)
   const kws = String(p.kata || '').split(/[;\n]/).map(s => s.trim()).filter(Boolean);
   p._kw     = kws.map(compact).filter(Boolean);
@@ -804,6 +817,11 @@ function refreshGrid(){
     if (sortMode === 'high') list.sort((a, b) => (b.hargaMin || 0) - (a.hargaMin || 0));
   }
 
+  // Tampilan awal (urutan default, tanpa pencarian): produk best price di atas
+  if (sortMode === 'default' && !q){
+    list = [...list].sort((a, b) => (famMap[b._fam].best > 0) - (famMap[a._fam].best > 0));
+  }
+  
   allProducts = list;
   renderGrid(list);
   updateResultBar();
@@ -893,20 +911,23 @@ function renderGrid(products){
     grid.innerHTML = '<p class="empty-state">Produk tidak ditemukan.</p>';
     return;
   }
-  // Satu kartu per keluarga; "lead" = anggota pertama (yang paling cocok saat mencari).
   const leads = new Map();
   products.forEach(p => { if(!leads.has(p._fam)) leads.set(p._fam, p); });
+  const arr = [...leads.values()];
 
-  grid.innerHTML = [...leads.values()].map(p=>{
+  const cardHtml = p => {
     const f = famMap[p._fam];
     const multi = f.members.length > 1;
     const thumb = p.thumbnail || f.thumb;
     const harga = (multi && f.min > 0) ? 'Mulai ' + rupiah(f.min) : priceRange(p);
     const disabled = !compareSet.has(p.id) && compareSet.size >= 3;
+    const best = f.best > 0;
     return `
     <div class="card" data-id="${p.id}">
       ${thumb ? `<img src="${thumb}" alt="" loading="lazy" onerror="handleImgError(this)">` : `<div class="ph-icon">${icon('box')}</div>`}
-      ${multi ? `<span class="badge">${f.members.length} varian</span>` : ''}
+      ${best ? `<span class="badge-best">Best price</span>` : ''}
+      ${multi ? `<span class="badge${best ? ' low' : ''}">${f.members.length} varian</span>` : ''}
+      ${best ? `<span class="price-pill">${multi ? 'Mulai ' : ''}${rupiah(f.best)}</span>` : ''}
       <button class="cmp-toggle" data-cmp="${p.id}" style="opacity:${disabled?'.35':'1'};color:${compareSet.has(p.id)?'var(--brand)':'var(--text-2)'}">${icon('compare')}</button>
       <div class="overlay">
         <p class="kat">#${p.kategori || 'Produk'}${f.sub ? ' · ' + f.sub : ''}</p>
@@ -914,7 +935,24 @@ function renderGrid(products){
         <p class="harga">${harga}</p>
       </div>
     </div>`;
-  }).join('');
+  };
+
+  // Batasi baris best price hanya di tampilan awal (urutan default, tanpa pencarian)
+  const bestOn = sortMode === 'default' && !searchTerm.trim();
+  const nb = bestOn ? arr.filter(p => famMap[p._fam].best > 0).length : 0;
+  let html;
+  if(bestOn && nb > BEST_LIMIT){
+    const bests = arr.slice(0, nb), rest = arr.slice(nb);
+    const shown = bestExpanded ? bests : bests.slice(0, BEST_LIMIT);
+    const btn = `<button class="best-more" id="best-more">${bestExpanded ? 'Sembunyikan best price' : 'Lihat ' + (nb - BEST_LIMIT) + ' best price lainnya'}</button>`;
+    html = shown.map(cardHtml).join('') + btn + rest.map(cardHtml).join('');
+  } else {
+    html = arr.map(cardHtml).join('');
+  }
+  grid.innerHTML = html;
+
+  const more = el('best-more');
+  if(more) more.addEventListener('click', () => { bestExpanded = !bestExpanded; renderGrid(allProducts); });
 
   grid.querySelectorAll('.card').forEach(card=>{
     card.addEventListener('click', (e)=>{
@@ -1245,6 +1283,7 @@ function renderDetail(p){
            <div class="hs-track">${images.map((u, i) =>
              `<div class="hs-slide${i === 0 ? ' active' : ''}"><img src="${i === 0 ? (p.thumbnail || u) : u}" alt="${p.model}" draggable="false" onerror="this.style.visibility='hidden'"></div>`
            ).join('')}</div>
+           ${p.hargaBest > 0 ? '<span class="badge-best">Best price</span>' : ''}
            ${images.length > 1 ? `<div class="hs-dots">${images.map((u, i) =>
              `<button type="button" class="hs-dot${i === 0 ? ' active' : ''}" data-i="${i}" aria-label="Gambar ${i + 1}"></button>`
            ).join('')}</div>` : ''}
@@ -1272,6 +1311,7 @@ function renderDetail(p){
       <div>
         <p class="lbl">Harga</p>
         <p class="val" id="price-out"></p>
+        ${p.hargaBest > 0 ? `<p class="bp-line"><span class="bp-tag">Best price</span>${rupiah(p.hargaBest)}</p>` : ''}
       </div>
       <button id="detail-compare-btn" data-id="${p.id}">${icon('compare')}<span>Bandingkan</span></button>
     </div>
