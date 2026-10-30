@@ -576,6 +576,16 @@ function lev(a, b){
 // BASIC ikut jadi kata konfigurasi, supaya "DS-PRO100 BASIC" satu keluarga dengan
 // "DS-PRO100 LITE / STANDARD / WITH TROLLEY".
 const FAMILY_PREFIX = ['MOL-02', 'BT-100', 'MFV-01', 'PROMAX'];
+
+// Aturan khusus: bagian nama yang cocok dengan regex = nama keluarga.
+const FAMILY_RULES = [
+  // PREMIERE-0n FOR <spesialisasi>, berhenti sebelum WITH atau sebelum nama yang terulang
+  /^PREMIERE-0\d\s+FOR\s+.+?(?=\s+PREMIERE-0\d|\s+WITH\b|$)/i,
+  // CMS-600 PLUS dipisah per jenis probe
+  /^CMS-600 PLUS (?:CONVEX & LINEAR PROBE|CONVEX & RECTAL PROBE|CONVEX PROBE)/i,
+  // PRA-ONE versi multi-probe dipisah dari versi CONVEX saja
+  /^PRA-ONE CONVEX, LINEAR, PHASED ARRAY, TRANSVAGINAL PROBE/i,
+];
 const CONFIG_SPLIT = /\s+(?:FOR\b|WITH\b|DENGAN\b|BASIC\b|LITE\b|STANDARD\b|LUX\b|W\/|\+(?=\S)|\d+\s*FHR)/i;
 const cleanName = s => String(s || '').replace(/\s+/g, ' ').trim();
 
@@ -589,6 +599,7 @@ function buildFamilyMeta(f){
   f.title = good ? jenis : base;
   f.jenis = jenis;
   f.sub   = (jenis && !good) ? jenis : '';
+  ms.sort((a, b) => (b._label === 'STANDARD') - (a._label === 'STANDARD'));
   f.rep   = ms.find(m => m._label === 'STANDARD') || ms[0];
   const mins = ms.map(m => m.hargaMin).filter(h => h > 0);
   const maxs = ms.map(m => m.hargaMax).filter(h => h > 0);
@@ -598,6 +609,9 @@ function buildFamilyMeta(f){
   const bests = ms.map(m => m.hargaBest).filter(h => h > 0);
   f.best = bests.length ? Math.min(...bests) : 0;
   ms.forEach(m => { m._famTitle = f.title; });
+  const seen = {};
+  ms.forEach(m => { seen[m._label] = (seen[m._label] || 0) + 1; });
+  ms.forEach(m => { if (seen[m._label] > 1) m._label += ' (' + m.kode + ')'; });
 }
 
 // Singkatan kode kategori -> nama lengkap. Kategori yang tidak ada di daftar (mis. "RGB") dibiarkan apa adanya.
@@ -641,8 +655,16 @@ function indexProduct(p){
   const pre = FAMILY_PREFIX
     .filter(x => nm.toUpperCase().startsWith(x.toUpperCase()))
     .sort((a, b) => b.length - a.length)[0];
-  p._base  = pre || nm.split(CONFIG_SPLIT)[0].trim() || nm;
-  p._label = nm.slice(p._base.length).trim() || 'STANDARD';
+  
+  let rule = null;
+  for (const r of FAMILY_RULES) { const m = nm.match(r); if (m) { rule = m[0].trim(); break; } }
+  
+  p._base  = rule || pre || nm.split(CONFIG_SPLIT)[0].trim() || nm;
+  let rest = nm.slice(p._base.length).trim();
+  // buang pengulangan nama seri (PREMIERE-0n ... sampai WITH / akhir teks)
+  rest = rest.replace(/^PREMIERE-0\d\b.*?(?=\bWITH\b|$)/i, '').trim();
+  rest = rest.replace(p._base, '').trim();
+  p._label = (rest || 'STANDARD').toUpperCase();
   p._fam    = compact((p.kategori || '') + '|' + p._base);
   p._tok    = [...new Set(tokens([p.namaDasar, p.model, p.kategori, p.kode, kws.join(' ')].join(' ')))];
   return p;
@@ -1839,6 +1861,7 @@ function applyData(txt){
   Object.values(famMap).forEach(buildFamilyMeta);
   renderChips();
   refreshGrid();
+  console.table(Object.values(famMap).map(f => ({ keluarga: f.title, jumlah: f.members.length })));
 }
 
 // lapor ke shell (kalau dibuka di dalam iframe) bahwa grid pertama sudah tampil
