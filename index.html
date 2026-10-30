@@ -575,7 +575,8 @@ function lev(a, b){
 // ("SONOTRAX MED-01 WITH TROLLEY UPS" -> induk "SONOTRAX MED-01", konfigurasi "WITH TROLLEY UPS").
 // BASIC ikut jadi kata konfigurasi, supaya "DS-PRO100 BASIC" satu keluarga dengan
 // "DS-PRO100 LITE / STANDARD / WITH TROLLEY".
-const CONFIG_SPLIT = /\s+(?:BASIC\b|STANDARD\b|LITE\b|LUX\b|WITH\b|W\/|\+|\d+\s*FHR)/i;
+const FAMILY_PREFIX = ['MOL-02', 'BT-100', 'MFV-01', 'PROMAX'];
+const CONFIG_SPLIT = /\s+(?:FOR\b|WITH\b|DENGAN\b|BASIC\b|LITE\b|STANDARD\b|LUX\b|W\/|\+(?=\S)|\d+\s*FHR)/i;
 const cleanName = s => String(s || '').replace(/\s+/g, ' ').trim();
 
 function buildFamilyMeta(f){
@@ -636,9 +637,12 @@ function indexProduct(p){
   p._kw     = kws.map(compact).filter(Boolean);
   p._hay    = compact([p.namaDasar, p.model, p.kategori, p.kode].join(' '));
   p._modelC = compact(p.model);
-  const nm  = cleanName(p.model);
-  p._base   = nm.split(CONFIG_SPLIT)[0].trim() || nm;
-  p._label  = nm.slice(p._base.length).trim() || 'STANDARD';
+  const nm = cleanName(p.model);
+  const pre = FAMILY_PREFIX
+    .filter(x => nm.toUpperCase().startsWith(x.toUpperCase()))
+    .sort((a, b) => b.length - a.length)[0];
+  p._base  = pre || nm.split(CONFIG_SPLIT)[0].trim() || nm;
+  p._label = nm.slice(p._base.length).trim() || 'STANDARD';
   p._fam    = compact((p.kategori || '') + '|' + p._base);
   p._tok    = [...new Set(tokens([p.namaDasar, p.model, p.kategori, p.kode, kws.join(' ')].join(' ')))];
   return p;
