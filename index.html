@@ -490,6 +490,7 @@ let compareSet = new Set();
 const BEST_LIMIT = 8;      // jumlah produk best price yang tampil sebelum "lihat lainnya"
 let bestExpanded = false;
 let modalConfirmTargetId = null;
+  let popupAddedId = null; 
 
 const el = id => document.getElementById(id);
 
@@ -714,10 +715,14 @@ function collapseSearch(){
   el('search-input').style.padding = '0';
   el('page-title').style.opacity = '1';
 }
-el('search-toggle').addEventListener('click', ()=> searchExpanded ? collapseSearch() : expandSearch());
+// cegah input kehilangan fokus sebelum klik, supaya blur tidak menutup lalu klik membuka lagi
+el('search-toggle').addEventListener('mousedown', e => e.preventDefault());
 el('search-input').addEventListener('blur', collapseSearch);
 el('search-input').addEventListener('input', e => {
   searchTerm = e.target.value;
+  if(!el('view-grid').classList.contains('active')){
+    goHome();          // kembali ke grid supaya hasil pencarian terlihat
+  }
   refreshGrid();
 });
 el('page-title').addEventListener('click', goHome);
@@ -749,6 +754,8 @@ function goHome(){
 function showGrid(){
   switchView('grid', 'Katalog Elitech', false);
   collapseSearch();
+  updateCompareUI();
+  renderGrid(allProducts);
   requestAnimationFrame(()=> window.scrollTo(0, gridScroll));
 }
 
@@ -1072,20 +1079,27 @@ async function openDetail(id, noPush){
   if(!noPush) pushNav({ v: 'detail', id: id });
   const local = byId[id];
   if(local && Array.isArray(local.varian)){
-    // Data sudah ada di browser -> tampil seketika, tanpa request.
     switchView('detail', local.model, true);
     renderDetail(withModelLain(local));
     return;
   }
-  // Cadangan: backend lama (data ringkas) -> ambil detail dari server.
+  // Cadangan: backend lama -> ambil detail dari server
   switchView('detail', '...', true);
-  const p = await loadDetail(id);
-  if(p.error){
-    el('view-detail').innerHTML = `<p class="empty-state">${p.error}</p>`;
-    return;
+  el('view-detail').innerHTML = '<p class="empty-state">Memuat detail...</p>';
+  try{
+    const p = await loadDetail(id);
+    // user sudah pindah halaman selagi menunggu -> abaikan hasil
+    if(history.state && history.state.id && history.state.id !== id) return;
+    if(!p || p.error || !Array.isArray(p.varian)){
+      throw new Error((p && p.error) || 'Data detail tidak valid');
+    }
+    renderDetail(p);
+    el('page-title').textContent = p.model;
+  }catch(err){
+    el('page-title').textContent = 'Detail produk';
+    el('view-detail').innerHTML =
+      '<p class="empty-state">Gagal memuat detail produk. Periksa koneksi lalu coba lagi.</p>';
   }
-  renderDetail(p);
-  el('page-title').textContent = p.model;
 }
 
 // Satu label spek hanya dipakai SEKALI (di sub-bagian pertama yang cocok).
@@ -1314,8 +1328,10 @@ function initHeroSlider(root){
 }
 
 function renderDetail(p){
+  const links = Array.isArray(p.links) ? p.links : [];
+  const varian = (Array.isArray(p.varian) && p.varian.length) ? p.varian : [{ tipe: '-', harga: 0 }];
   const images = p.gambar && p.gambar.length ? p.gambar : [];
-  const useBoxes = p.varian.length <= 4;
+  const useBoxes = varian.length <= 4;
   const specGroupsHtml = buildSpecGroupsHtml_(p.spesifikasiDetail);
 
   el('view-detail').innerHTML = `
@@ -1367,9 +1383,9 @@ function renderDetail(p){
     ` : ''}
 
     <div class="link-row">
-      <a href="${p.links[0]||'#'}" target="_blank" rel="noopener" class="${!p.links[0]?'disabled':''}">${icon('doc')}<span>Brosur</span></a>
-      <a href="${p.links[1]||'#'}" target="_blank" rel="noopener" class="${!p.links[1]?'disabled':''}">${icon('cert')}<span>NIE</span></a>
-      <a href="${p.links[2]||'#'}" target="_blank" rel="noopener" class="${!p.links[2]?'disabled':''}">${icon('link')}<span>Inaproc</span></a>
+    <a href="${links[0]||'#'}" target="_blank" rel="noopener" class="${!links[0]?'disabled':''}">${icon('doc')}<span>Brosur</span></a>
+    <a href="${links[1]||'#'}" target="_blank" rel="noopener" class="${!links[1]?'disabled':''}">${icon('cert')}<span>NIE</span></a>
+    <a href="${links[2]||'#'}" target="_blank" rel="noopener" class="${!links[2]?'disabled':''}">${icon('link')}<span>Inaproc</span></a>
     </div>
 
     ${p.modelLain && p.modelLain.length ? `
@@ -1415,24 +1431,24 @@ function renderDetail(p){
   const priceOut = document.getElementById('price-out');
   const varArea = document.getElementById('variant-area');
   if(useBoxes){
-    varArea.innerHTML = p.varian.map((v,i)=>
-      `<button class="variant-box ${i===0?'active':''}" data-idx="${i}">${v.tipe}</button>`
-    ).join('');
-    varArea.querySelectorAll('.variant-box').forEach(b=>{
-      b.addEventListener('click', ()=>{
-        varArea.querySelectorAll('.variant-box').forEach(x=>x.classList.remove('active'));
-        b.classList.add('active');
-        priceOut.textContent = rupiah(p.varian[b.dataset.idx].harga);
-      });
+  varArea.innerHTML = varian.map((v,i)=>
+    `<button class="variant-box ${i===0?'active':''}" data-idx="${i}">${v.tipe}</button>`
+  ).join('');
+  varArea.querySelectorAll('.variant-box').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      varArea.querySelectorAll('.variant-box').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      priceOut.textContent = rupiah(varian[b.dataset.idx].harga);
     });
-  } else {
-    const sel = document.createElement('select');
-    sel.id = 'variant-select';
-    sel.innerHTML = p.varian.map((v,i)=>`<option value="${i}">${v.tipe} — ${rupiah(v.harga)}</option>`).join('');
-    sel.addEventListener('change', ()=> priceOut.textContent = rupiah(p.varian[sel.value].harga));
-    varArea.appendChild(sel);
-  }
-  priceOut.textContent = rupiah(p.varian[0].harga);
+  });
+} else {
+  const sel = document.createElement('select');
+  sel.id = 'variant-select';
+  sel.innerHTML = varian.map((v,i)=>`<option value="${i}">${v.tipe} — ${rupiah(v.harga)}</option>`).join('');
+  sel.addEventListener('change', ()=> priceOut.textContent = rupiah(varian[sel.value].harga));
+  varArea.appendChild(sel);
+}
+priceOut.textContent = rupiah(varian[0].harga);
 
   // spesifikasi accordion (catatan lama dari kolom O)
   const specToggle = document.getElementById('spec-toggle');
@@ -1704,14 +1720,34 @@ async function open3d(p, info){
    MODAL "PILIH PRODUK UNTUK DIBANDINGKAN" (dari halaman detail)
    ========================================================= */
 function openComparePopup(currentId){
-  compareSet.add(currentId); // produk yang sedang dibuka otomatis jadi slot pertama
-  modalConfirmTargetId = currentId;
+  popupAddedId = null;
+  if(!compareSet.has(currentId) && compareSet.size < 3){
+    compareSet.add(currentId);
+    popupAddedId = currentId;
+  }
   renderModalList('');
   el('modal-search').value = '';
   el('modal-overlay').classList.add('show');
   updateCompareUI();
   renderModalFooter();
 }
+
+function cancelComparePopup(){
+  if(popupAddedId){
+    compareSet.delete(popupAddedId);
+    popupAddedId = null;
+    updateCompareUI();
+    renderGrid(allProducts);
+  }
+  el('modal-overlay').classList.remove('show');
+}
+
+function confirmComparePopup(){
+  popupAddedId = null;
+  el('modal-overlay').classList.remove('show');
+  openCompareView([...compareSet]);
+}
+  
 function renderModalList(query){
   const q = query.toLowerCase();
   const filtered = masterProducts.filter(p =>
@@ -1747,12 +1783,9 @@ function renderModalFooter(){
     : 'Pilih minimal 2 produk';
 }
 el('modal-search').addEventListener('input', e => renderModalList(e.target.value));
-el('modal-close').addEventListener('click', ()=> el('modal-overlay').classList.remove('show'));
-el('modal-overlay').addEventListener('click', e=>{ if(e.target.id === 'modal-overlay') el('modal-overlay').classList.remove('show'); });
-el('modal-confirm').addEventListener('click', ()=>{
-  el('modal-overlay').classList.remove('show');
-  openCompareView([...compareSet]);
-});
+el('modal-close').addEventListener('click', cancelComparePopup);
+el('modal-overlay').addEventListener('click', e => { if(e.target.id === 'modal-overlay') cancelComparePopup(); });
+el('modal-confirm').addEventListener('click', confirmComparePopup);
 
 /* =========================================================
    COMPARE VIEW
@@ -1784,10 +1817,20 @@ async function openCompareView(ids, noPush){
     return;
   }
   const local = ids.map(id => byId[id]).filter(p => p && Array.isArray(p.varian));
-  const items = local.length === ids.length ? local : await loadCompare(ids);
+  let items;
+  if(local.length === ids.length){
+    items = local;
+  } else {
+    el('view-compare').innerHTML = '<p id="compare-empty">Memuat perbandingan...</p>';
+    try{ items = await loadCompare(ids); }catch(e){ items = []; }
+    if(!items.length){
+      el('view-compare').innerHTML =
+        '<p id="compare-empty">Gagal memuat perbandingan. Periksa koneksi lalu coba lagi.</p>';
+      return;
+    }
+  }
 
-  // Gabungkan semua label spek unik dari SEMUA produk, urut kemunculan
-  // pertama; produk yang tidak punya label itu tetap dapat baris ("-").
+  // ... lanjutkan dengan kode lama mulai dari "const specLabels = [];"
   const specLabels = [];
   items.forEach(m=>{
     (m.spesifikasiDetail || []).forEach(s=>{
@@ -1831,7 +1874,7 @@ async function openCompareView(ids, noPush){
         <tr><th class="label"></th>${items.map(m=>`<th><div class="thumb-wrap">${thumbHtml(m.thumbnail)}</div><p class="model-name">${m.model}</p></th>`).join('')}</tr>
         ${kategoriRowHtml}
         ${hargaRowHtml}
-        <tr><td class="label">Jumlah konfigurasi</td>${items.map(m=>`<td>${m.varian.length}</td>`).join('')}</tr>
+        <tr><td class="label">Jumlah konfigurasi</td>${items.map(m=>`<td>${(m.varian || []).length}</td>`).join('')}</tr>
         ${specRowsHtml}
         ${catatanRowHtml}
       </table>
@@ -1873,7 +1916,7 @@ function notifyReady(){
 // bukan keluar dari aplikasi. Dari grid, back tetap keluar seperti biasa.
 history.replaceState({ v: 'grid', d: 0 }, '');
 window.addEventListener('popstate', e => {
-  el('modal-overlay').classList.remove('show');
+  cancelComparePopup();
   const s = e.state;
   navDepth = s && s.d ? s.d : 0;
   if(!s || !s.v || s.v === 'grid') showGrid();
