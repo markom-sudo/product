@@ -773,6 +773,7 @@ function collapseSearch(){
   el('page-title').style.opacity = '1';
 }
 // cegah input kehilangan fokus sebelum klik, supaya blur tidak menutup lalu klik membuka lagi
+el('search-toggle').addEventListener('mousedown', e => e.preventDefault());
 el('search-toggle').addEventListener('click', ()=> searchExpanded ? collapseSearch() : expandSearch());
 el('search-input').addEventListener('blur', collapseSearch);
 el('search-input').addEventListener('input', e => {
@@ -1504,6 +1505,334 @@ priceOut.textContent = rupiah(varian[0].harga);
     });
   }
 
+  
+  // compare button
+  document.getElementById('detail-compare-btn').addEventListener('click', ()=> openComparePopup(p.id));
+  updateCompareUI();
+
+  // tombol mode: Foto / 360 / 3D
+  const setVMode = id => document.querySelectorAll('.vbtns .vbtn').forEach(b => b.classList.toggle('active', b.id === id));
+  const bPhoto = document.getElementById('btnPhoto');
+  if(bPhoto) bPhoto.addEventListener('click', () => { if(!bPhoto.classList.contains('active')) renderDetail(p); });
+  const b360 = document.getElementById('btn360');
+  if(b360) b360.addEventListener('click', () => {
+    if(b360.classList.contains('active')) return;
+    open360(info360(p)); setVMode('btn360');
+  });
+  const b3d = document.getElementById('btn3d');
+  if(b3d) b3d.addEventListener('click', () => {
+    if(b3d.classList.contains('active')) return;
+    open3d(p, info3d(p)); setVMode('btn3d');
+  });
+
+  // konfigurasi (anggota keluarga yang sama)
+  document.querySelectorAll('#cfg-area .cfg-chip').forEach(b=>{
+    b.addEventListener('click', ()=>{ if(b.dataset.id !== p.id) swapDetail(b.dataset.id); });
+  });
+
+  // model lain
+  if(p.modelLain && p.modelLain.length){
+    const wrap = document.getElementById('other-models');
+    wrap.innerHTML = p.modelLain.map(o=>`
+      <div class="other-chip" data-id="${o.id}">
+        <div class="thumb-wrap">${thumbHtml(o.thumbnail)}</div>
+        <p>${o.model}</p>
+        <p class="p2">${priceRange(o)}</p>
+      </div>`).join('');
+    wrap.querySelectorAll('.other-chip').forEach(c=> c.addEventListener('click', ()=> openDetail(c.dataset.id)));
+  }
+}
+
+/* =========================================================
+   VIEWER FOTO 360° & MODEL 3D (dimuat hanya saat tombolnya ditekan)
+   - 360/index.json : { "SHEET||KODE": { "dir": "...", "n": 24, "w": 4, "h": 3 } }
+   - 3d/index.json  : { "SHEET||KODE": { "file": "....glb" } }
+   ========================================================= */
+let manifest360 = {}, manifest3d = {};
+fetch('360/index.json').then(r => r.ok ? r.json() : {}).then(m => { manifest360 = m || {}; }).catch(() => {});
+fetch('3d/index.json').then(r => r.ok ? r.json() : {}).then(m => { manifest3d = m || {}; }).catch(() => {});
+
+// Cadangan: kalau konfigurasi yang dibuka tidak punya berkas sendiri, pakai milik konfigurasi utama keluarganya.
+function findInfo(man, p){
+  if(man[p.id]) return man[p.id];
+  const f = famMap[p._fam];
+  return (f && man[f.rep.id]) || null;
+}
+const info360 = p => findInfo(manifest360, p);
+
+// 3D disembunyikan di perangkat tanpa WebGL atau dengan RAM sangat kecil.
+const canShow3d = (() => {
+  try {
+    const c = document.createElement('canvas');
+    if(!(c.getContext('webgl2') || c.getContext('webgl'))) return false;
+  } catch(e){ return false; }
+  return (navigator.deviceMemory || 4) >= 2;
+})();
+const info3d = p => canShow3d ? findInfo(manifest3d, p) : null;
+
+// Elemen yang sedang menampilkan "hero" (slider foto, viewer 360, atau viewer 3D)
+function currentHero(){
+  return document.getElementById('hero-img')
+    || document.querySelector('#view-detail .v360')
+    || document.querySelector('#view-detail .v3d')
+    || document.querySelector('#view-detail .hero-ph');
+}
+
+// ----- Layar penuh (API native kalau ada; cadangan: lapisan CSS menutup layar, mis. di iPhone) -----
+const FS_ICON = {
+  enter: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+  exit:  '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
+};
+const nativeFsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+
+function setFs(w, on){
+  if(on){
+    // animasi masuk halaman memberi 'transform' permanen yang membuat position:fixed
+    // terkurung di dalam halaman; lepas dulu supaya benar-benar menutup layar.
+    el('view-detail').classList.remove('view-transition');
+  }
+  w.classList.toggle('vfs-on', on);
+  const b = w.querySelector('.vfs-btn');
+  if(b){ b.innerHTML = on ? FS_ICON.exit : FS_ICON.enter; b.setAttribute('aria-label', on ? 'Keluar layar penuh' : 'Layar penuh'); }
+  const mv = w.querySelector('model-viewer');
+  if(mv) mv.setAttribute('touch-action', on ? 'none' : 'pan-y');
+  try{
+    if(on){
+      const rq = w.requestFullscreen || w.webkitRequestFullscreen;
+      if(rq){ const r = rq.call(w); if(r && r.catch) r.catch(() => {}); }
+    } else if(nativeFsEl()){
+      const ex = document.exitFullscreen || document.webkitExitFullscreen;
+      if(ex){ const r = ex.call(document); if(r && r.catch) r.catch(() => {}); }
+    }
+  }catch(e){}
+}
+function addFsButton(w){
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'vfs-btn';
+  b.innerHTML = FS_ICON.enter; b.setAttribute('aria-label', 'Layar penuh');
+  b.addEventListener('click', () => setFs(w, !w.classList.contains('vfs-on')));
+  w.appendChild(b);
+}
+function exitAllFs(){
+  document.querySelectorAll('.vfs-on').forEach(w => setFs(w, false));
+}
+// Keluar lewat tombol Esc / gestur sistem: samakan tampilan dengan status native.
+['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+  if(!nativeFsEl()) document.querySelectorAll('.vfs-on').forEach(w => {
+    w.classList.remove('vfs-on');
+    const b = w.querySelector('.vfs-btn');
+    if(b){ b.innerHTML = FS_ICON.enter; b.setAttribute('aria-label', 'Layar penuh'); }
+    const mv = w.querySelector('model-viewer'); if(mv) mv.setAttribute('touch-action', 'pan-y');
+  });
+}));
+document.addEventListener('keydown', e => { if(e.key === 'Escape') exitAllFs(); });
+
+function open360(info){
+  const old = currentHero();
+  if(!old) return;
+  const n = info.n, wrap = document.createElement('div');
+  wrap.className = 'v360';
+  wrap.style.aspectRatio = (info.w || 4) + '/' + (info.h || 3);
+  wrap.innerHTML = '<canvas></canvas><div class="v360-bar"><span>Geser untuk memutar</span><div class="v360-prog"><i></i></div></div>';
+  old.replaceWith(wrap);
+  addFsButton(wrap);
+
+  const cv = wrap.querySelector('canvas'), g = cv.getContext('2d'), bar = wrap.querySelector('.v360-prog i');
+  const imgs = new Array(n);
+  let loaded = 0, angle = 0, vel = 0, drag = false, lastX = 0, lastT = 0, shown = -1, auto = 360;
+  let prev = performance.now(), idle = prev + 1000;
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) idle = Infinity;
+
+  const url = i => '360/' + info.dir + '/' + String(i + 1).padStart(2, '0') + '.webp';
+  const pick = i => {
+    for(let d = 0; d < n; d++){ const a = imgs[(i + d) % n], b = imgs[(i - d + n) % n]; if(a) return a; if(b) return b; }
+    return null;
+  };
+  function draw(force){
+    const i = Math.floor((((angle % 360) + 360) % 360) / (360 / n));
+    const im = pick(i);
+    if(!im || (i === shown && !force)) return;
+    shown = i; g.drawImage(im, 0, 0, cv.width, cv.height);
+  }
+
+  // Urutan muat: frame jarang dulu (tiap n/4) supaya langsung bisa digeser, baru sisanya.
+  const step = Math.max(1, Math.round(n / 4)), order = [], seen = new Set();
+  for(let i = 0; i < n; i += step){ order.push(i); seen.add(i); }
+  for(let i = 0; i < n; i++) if(!seen.has(i)) order.push(i);
+  let next = 0;
+  const pump = () => {
+    if(next >= order.length) return;
+    const i = order[next++], im = new Image();
+    im.onload = () => {
+      imgs[i] = im; loaded++;
+      bar.style.width = (loaded / n * 100) + '%';
+      if(loaded === 1){ cv.width = im.naturalWidth; cv.height = im.naturalHeight; }
+      draw(true); pump();
+    };
+    im.onerror = pump;
+    im.src = url(i);
+  };
+  for(let k = 0; k < 4; k++) pump();
+
+  cv.addEventListener('pointerdown', e => { drag = true; lastX = e.clientX; lastT = performance.now(); vel = 0; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', e => {
+    if(!drag) return;
+    const now = performance.now(), dx = e.clientX - lastX;
+    angle -= dx * 0.6; vel = -dx * 0.6 / Math.max(1, now - lastT) * 1000;
+    lastX = e.clientX; lastT = now; draw();
+  });
+  const end = () => { if(drag){ drag = false; idle = performance.now() + 2500; } };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+
+  (function loop(now){
+    if(!document.body.contains(cv)) return;            // viewer sudah diganti -> berhenti
+    const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
+    if(!drag){
+      if(Math.abs(vel) > 2){ angle += vel * dt; vel *= Math.pow(0.9, dt * 60); }
+      else if(now > idle){ const d = 36 * dt; angle += d; auto -= d; if(auto <= 0) idle = Infinity; }  // auto-putar hanya satu putaran (hemat baterai)
+      draw();
+    }
+    requestAnimationFrame(loop);
+  })(performance.now());
+}
+
+let mvLoading = null;
+function loadModelViewer(){
+  if(window.customElements && customElements.get('model-viewer')) return Promise.resolve();
+  if(!mvLoading){
+    // Coba berurutan: berkas lokal -> berkas lokal dengan parameter baru (menghindari salinan gagal yang
+    // tersangkut di cache perangkat) -> CDN (butuh internet). Kegagalan TIDAK diingat, jadi bisa dicoba ulang.
+    const tries = [
+      './vendor/model-viewer.min.js',
+      './vendor/model-viewer.min.js?r=1',
+      'https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js',
+    ];
+    mvLoading = (async () => {
+      let first = null;
+      for(const u of tries){
+        try{ await import(u); return; }
+        catch(e){ if(!first) first = e; }
+      }
+      throw first;
+    })().catch(e => { mvLoading = null; throw e; });
+  }
+  return mvLoading;
+}
+
+async function open3d(p, info){
+  const old = currentHero();
+  if(!old) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'v3d';
+  wrap.innerHTML = '<div class="v3d-load">Memuat model 3D…</div>';
+  old.replaceWith(wrap);
+  addFsButton(wrap);
+  try{
+    await loadModelViewer();
+    const mv = document.createElement('model-viewer');
+    mv.setAttribute('src', '3d/' + info.file);
+    if(p.thumbnail) mv.setAttribute('poster', p.thumbnail);
+    mv.setAttribute('camera-controls', '');
+    mv.setAttribute('auto-rotate', '');
+    mv.setAttribute('auto-rotate-delay', '1500');
+    mv.setAttribute('touch-action', 'pan-y');
+    mv.setAttribute('interaction-prompt', 'none');
+    mv.setAttribute('shadow-intensity', '0.5');
+    mv.addEventListener('load', () => { const l = wrap.querySelector('.v3d-load'); if(l) l.remove(); });
+    mv.addEventListener('error', ev => {
+      const det = ev && ev.detail && ev.detail.sourceError;
+      console.error('model-viewer:', ev && ev.detail);
+      const d = document.createElement('div');
+      d.className = 'v3d-load';
+      d.textContent = 'Model 3D gagal dimuat atau ditampilkan di perangkat ini' + (det && det.message ? ' [' + det.message + ']' : '') + '. Periksa ukuran file .glb (disarankan di bawah 5 MB).';
+      wrap.innerHTML = '';
+      wrap.appendChild(d);
+    });
+    wrap.appendChild(mv);
+  }catch(e){
+    console.error('open3d:', e);
+    const d = document.createElement('div');
+    d.className = 'v3d-load';
+    d.textContent = 'Library 3D belum terpasang atau rusak (vendor/model-viewer.min.js)' + (e && e.message ? ' [' + e.message + ']' : '');
+    wrap.innerHTML = '';
+    wrap.appendChild(d);
+  }
+}
+
+/* =========================================================
+   MODAL "PILIH PRODUK UNTUK DIBANDINGKAN" (dari halaman detail)
+   ========================================================= */
+function openComparePopup(currentId){
+  popupAddedId = null;
+  if(!compareSet.has(currentId) && compareSet.size < 3){
+    compareSet.add(currentId);
+    popupAddedId = currentId;
+  }
+  renderModalList('');
+  el('modal-search').value = '';
+  el('modal-overlay').classList.add('show');
+  updateCompareUI();
+  renderModalFooter();
+}
+
+function cancelComparePopup(){
+  if(popupAddedId){
+    compareSet.delete(popupAddedId);
+    popupAddedId = null;
+    updateCompareUI();
+    renderGrid(allProducts);
+  }
+  el('modal-overlay').classList.remove('show');
+}
+
+function confirmComparePopup(){
+  popupAddedId = null;
+  el('modal-overlay').classList.remove('show');
+  openCompareView([...compareSet]);
+}
+  
+function renderModalList(query){
+  const q = query.toLowerCase();
+  const filtered = masterProducts.filter(p =>
+    (p.namaDasar + ' ' + p.model).toLowerCase().includes(q)
+  );
+  el('modal-list').innerHTML = filtered.map(p=>{
+    const checked = compareSet.has(p.id);
+    const disabled = !checked && compareSet.size >= 3;
+    return `
+    <label class="modal-row" style="opacity:${disabled?'.4':'1'}">
+      <div class="thumb-wrap">${thumbHtml(p.thumbnail)}</div>
+      <div class="info">
+        <p class="model">${p.model}</p>
+        <p class="harga">${priceRange(p)}</p>
+      </div>
+      <input type="checkbox" data-id="${p.id}" ${checked?'checked':''} ${disabled?'disabled':''}>
+    </label>`;
+  }).join('');
+  el('modal-list').querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      if(cb.checked) compareSet.add(cb.dataset.id);
+      else compareSet.delete(cb.dataset.id);
+      renderModalList(el('modal-search').value);
+      renderModalFooter();
+      updateCompareUI();
+    });
+  });
+}
+function renderModalFooter(){
+  el('modal-confirm').disabled = compareSet.size < 2;
+  el('modal-confirm').textContent = compareSet.size >= 2
+    ? `Lihat perbandingan (${compareSet.size})`
+    : 'Pilih minimal 2 produk';
+}
+el('modal-search').addEventListener('input', e => renderModalList(e.target.value));
+el('modal-close').addEventListener('click', cancelComparePopup);
+el('modal-overlay').addEventListener('click', e => { if(e.target.id === 'modal-overlay') cancelComparePopup(); });
+el('modal-confirm').addEventListener('click', confirmComparePopup);
+
+/* =========================================================
+   COMPARE VIEW
+   ========================================================= */
 /* ---------- helper kecil ---------- */
 function esc_(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
@@ -1919,391 +2248,6 @@ function updateCompareUI(){
   if (detailBtn){
     detailBtn.classList.toggle('active', compareSet.has(detailBtn.dataset.id));
   }
-}
-  
-  // compare button
-  document.getElementById('detail-compare-btn').addEventListener('click', ()=> openComparePopup(p.id));
-  updateCompareUI();
-
-  // tombol mode: Foto / 360 / 3D
-  const setVMode = id => document.querySelectorAll('.vbtns .vbtn').forEach(b => b.classList.toggle('active', b.id === id));
-  const bPhoto = document.getElementById('btnPhoto');
-  if(bPhoto) bPhoto.addEventListener('click', () => { if(!bPhoto.classList.contains('active')) renderDetail(p); });
-  const b360 = document.getElementById('btn360');
-  if(b360) b360.addEventListener('click', () => {
-    if(b360.classList.contains('active')) return;
-    open360(info360(p)); setVMode('btn360');
-  });
-  const b3d = document.getElementById('btn3d');
-  if(b3d) b3d.addEventListener('click', () => {
-    if(b3d.classList.contains('active')) return;
-    open3d(p, info3d(p)); setVMode('btn3d');
-  });
-
-  // konfigurasi (anggota keluarga yang sama)
-  document.querySelectorAll('#cfg-area .cfg-chip').forEach(b=>{
-    b.addEventListener('click', ()=>{ if(b.dataset.id !== p.id) swapDetail(b.dataset.id); });
-  });
-
-  // model lain
-  if(p.modelLain && p.modelLain.length){
-    const wrap = document.getElementById('other-models');
-    wrap.innerHTML = p.modelLain.map(o=>`
-      <div class="other-chip" data-id="${o.id}">
-        <div class="thumb-wrap">${thumbHtml(o.thumbnail)}</div>
-        <p>${o.model}</p>
-        <p class="p2">${priceRange(o)}</p>
-      </div>`).join('');
-    wrap.querySelectorAll('.other-chip').forEach(c=> c.addEventListener('click', ()=> openDetail(c.dataset.id)));
-  }
-}
-
-/* =========================================================
-   VIEWER FOTO 360° & MODEL 3D (dimuat hanya saat tombolnya ditekan)
-   - 360/index.json : { "SHEET||KODE": { "dir": "...", "n": 24, "w": 4, "h": 3 } }
-   - 3d/index.json  : { "SHEET||KODE": { "file": "....glb" } }
-   ========================================================= */
-let manifest360 = {}, manifest3d = {};
-fetch('360/index.json').then(r => r.ok ? r.json() : {}).then(m => { manifest360 = m || {}; }).catch(() => {});
-fetch('3d/index.json').then(r => r.ok ? r.json() : {}).then(m => { manifest3d = m || {}; }).catch(() => {});
-
-// Cadangan: kalau konfigurasi yang dibuka tidak punya berkas sendiri, pakai milik konfigurasi utama keluarganya.
-function findInfo(man, p){
-  if(man[p.id]) return man[p.id];
-  const f = famMap[p._fam];
-  return (f && man[f.rep.id]) || null;
-}
-const info360 = p => findInfo(manifest360, p);
-
-// 3D disembunyikan di perangkat tanpa WebGL atau dengan RAM sangat kecil.
-const canShow3d = (() => {
-  try {
-    const c = document.createElement('canvas');
-    if(!(c.getContext('webgl2') || c.getContext('webgl'))) return false;
-  } catch(e){ return false; }
-  return (navigator.deviceMemory || 4) >= 2;
-})();
-const info3d = p => canShow3d ? findInfo(manifest3d, p) : null;
-
-// Elemen yang sedang menampilkan "hero" (slider foto, viewer 360, atau viewer 3D)
-function currentHero(){
-  return document.getElementById('hero-img')
-    || document.querySelector('#view-detail .v360')
-    || document.querySelector('#view-detail .v3d')
-    || document.querySelector('#view-detail .hero-ph');
-}
-
-// ----- Layar penuh (API native kalau ada; cadangan: lapisan CSS menutup layar, mis. di iPhone) -----
-const FS_ICON = {
-  enter: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
-  exit:  '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
-};
-const nativeFsEl = () => document.fullscreenElement || document.webkitFullscreenElement || null;
-
-function setFs(w, on){
-  if(on){
-    // animasi masuk halaman memberi 'transform' permanen yang membuat position:fixed
-    // terkurung di dalam halaman; lepas dulu supaya benar-benar menutup layar.
-    el('view-detail').classList.remove('view-transition');
-  }
-  w.classList.toggle('vfs-on', on);
-  const b = w.querySelector('.vfs-btn');
-  if(b){ b.innerHTML = on ? FS_ICON.exit : FS_ICON.enter; b.setAttribute('aria-label', on ? 'Keluar layar penuh' : 'Layar penuh'); }
-  const mv = w.querySelector('model-viewer');
-  if(mv) mv.setAttribute('touch-action', on ? 'none' : 'pan-y');
-  try{
-    if(on){
-      const rq = w.requestFullscreen || w.webkitRequestFullscreen;
-      if(rq){ const r = rq.call(w); if(r && r.catch) r.catch(() => {}); }
-    } else if(nativeFsEl()){
-      const ex = document.exitFullscreen || document.webkitExitFullscreen;
-      if(ex){ const r = ex.call(document); if(r && r.catch) r.catch(() => {}); }
-    }
-  }catch(e){}
-}
-function addFsButton(w){
-  const b = document.createElement('button');
-  b.type = 'button'; b.className = 'vfs-btn';
-  b.innerHTML = FS_ICON.enter; b.setAttribute('aria-label', 'Layar penuh');
-  b.addEventListener('click', () => setFs(w, !w.classList.contains('vfs-on')));
-  w.appendChild(b);
-}
-function exitAllFs(){
-  document.querySelectorAll('.vfs-on').forEach(w => setFs(w, false));
-}
-// Keluar lewat tombol Esc / gestur sistem: samakan tampilan dengan status native.
-['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
-  if(!nativeFsEl()) document.querySelectorAll('.vfs-on').forEach(w => {
-    w.classList.remove('vfs-on');
-    const b = w.querySelector('.vfs-btn');
-    if(b){ b.innerHTML = FS_ICON.enter; b.setAttribute('aria-label', 'Layar penuh'); }
-    const mv = w.querySelector('model-viewer'); if(mv) mv.setAttribute('touch-action', 'pan-y');
-  });
-}));
-document.addEventListener('keydown', e => { if(e.key === 'Escape') exitAllFs(); });
-
-function open360(info){
-  const old = currentHero();
-  if(!old) return;
-  const n = info.n, wrap = document.createElement('div');
-  wrap.className = 'v360';
-  wrap.style.aspectRatio = (info.w || 4) + '/' + (info.h || 3);
-  wrap.innerHTML = '<canvas></canvas><div class="v360-bar"><span>Geser untuk memutar</span><div class="v360-prog"><i></i></div></div>';
-  old.replaceWith(wrap);
-  addFsButton(wrap);
-
-  const cv = wrap.querySelector('canvas'), g = cv.getContext('2d'), bar = wrap.querySelector('.v360-prog i');
-  const imgs = new Array(n);
-  let loaded = 0, angle = 0, vel = 0, drag = false, lastX = 0, lastT = 0, shown = -1, auto = 360;
-  let prev = performance.now(), idle = prev + 1000;
-  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) idle = Infinity;
-
-  const url = i => '360/' + info.dir + '/' + String(i + 1).padStart(2, '0') + '.webp';
-  const pick = i => {
-    for(let d = 0; d < n; d++){ const a = imgs[(i + d) % n], b = imgs[(i - d + n) % n]; if(a) return a; if(b) return b; }
-    return null;
-  };
-  function draw(force){
-    const i = Math.floor((((angle % 360) + 360) % 360) / (360 / n));
-    const im = pick(i);
-    if(!im || (i === shown && !force)) return;
-    shown = i; g.drawImage(im, 0, 0, cv.width, cv.height);
-  }
-
-  // Urutan muat: frame jarang dulu (tiap n/4) supaya langsung bisa digeser, baru sisanya.
-  const step = Math.max(1, Math.round(n / 4)), order = [], seen = new Set();
-  for(let i = 0; i < n; i += step){ order.push(i); seen.add(i); }
-  for(let i = 0; i < n; i++) if(!seen.has(i)) order.push(i);
-  let next = 0;
-  const pump = () => {
-    if(next >= order.length) return;
-    const i = order[next++], im = new Image();
-    im.onload = () => {
-      imgs[i] = im; loaded++;
-      bar.style.width = (loaded / n * 100) + '%';
-      if(loaded === 1){ cv.width = im.naturalWidth; cv.height = im.naturalHeight; }
-      draw(true); pump();
-    };
-    im.onerror = pump;
-    im.src = url(i);
-  };
-  for(let k = 0; k < 4; k++) pump();
-
-  cv.addEventListener('pointerdown', e => { drag = true; lastX = e.clientX; lastT = performance.now(); vel = 0; cv.setPointerCapture(e.pointerId); });
-  cv.addEventListener('pointermove', e => {
-    if(!drag) return;
-    const now = performance.now(), dx = e.clientX - lastX;
-    angle -= dx * 0.6; vel = -dx * 0.6 / Math.max(1, now - lastT) * 1000;
-    lastX = e.clientX; lastT = now; draw();
-  });
-  const end = () => { if(drag){ drag = false; idle = performance.now() + 2500; } };
-  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
-
-  (function loop(now){
-    if(!document.body.contains(cv)) return;            // viewer sudah diganti -> berhenti
-    const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
-    if(!drag){
-      if(Math.abs(vel) > 2){ angle += vel * dt; vel *= Math.pow(0.9, dt * 60); }
-      else if(now > idle){ const d = 36 * dt; angle += d; auto -= d; if(auto <= 0) idle = Infinity; }  // auto-putar hanya satu putaran (hemat baterai)
-      draw();
-    }
-    requestAnimationFrame(loop);
-  })(performance.now());
-}
-
-let mvLoading = null;
-function loadModelViewer(){
-  if(window.customElements && customElements.get('model-viewer')) return Promise.resolve();
-  if(!mvLoading){
-    // Coba berurutan: berkas lokal -> berkas lokal dengan parameter baru (menghindari salinan gagal yang
-    // tersangkut di cache perangkat) -> CDN (butuh internet). Kegagalan TIDAK diingat, jadi bisa dicoba ulang.
-    const tries = [
-      './vendor/model-viewer.min.js',
-      './vendor/model-viewer.min.js?r=1',
-      'https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js',
-    ];
-    mvLoading = (async () => {
-      let first = null;
-      for(const u of tries){
-        try{ await import(u); return; }
-        catch(e){ if(!first) first = e; }
-      }
-      throw first;
-    })().catch(e => { mvLoading = null; throw e; });
-  }
-  return mvLoading;
-}
-
-async function open3d(p, info){
-  const old = currentHero();
-  if(!old) return;
-  const wrap = document.createElement('div');
-  wrap.className = 'v3d';
-  wrap.innerHTML = '<div class="v3d-load">Memuat model 3D…</div>';
-  old.replaceWith(wrap);
-  addFsButton(wrap);
-  try{
-    await loadModelViewer();
-    const mv = document.createElement('model-viewer');
-    mv.setAttribute('src', '3d/' + info.file);
-    if(p.thumbnail) mv.setAttribute('poster', p.thumbnail);
-    mv.setAttribute('camera-controls', '');
-    mv.setAttribute('auto-rotate', '');
-    mv.setAttribute('auto-rotate-delay', '1500');
-    mv.setAttribute('touch-action', 'pan-y');
-    mv.setAttribute('interaction-prompt', 'none');
-    mv.setAttribute('shadow-intensity', '0.5');
-    mv.addEventListener('load', () => { const l = wrap.querySelector('.v3d-load'); if(l) l.remove(); });
-    mv.addEventListener('error', ev => {
-      const det = ev && ev.detail && ev.detail.sourceError;
-      console.error('model-viewer:', ev && ev.detail);
-      const d = document.createElement('div');
-      d.className = 'v3d-load';
-      d.textContent = 'Model 3D gagal dimuat atau ditampilkan di perangkat ini' + (det && det.message ? ' [' + det.message + ']' : '') + '. Periksa ukuran file .glb (disarankan di bawah 5 MB).';
-      wrap.innerHTML = '';
-      wrap.appendChild(d);
-    });
-    wrap.appendChild(mv);
-  }catch(e){
-    console.error('open3d:', e);
-    const d = document.createElement('div');
-    d.className = 'v3d-load';
-    d.textContent = 'Library 3D belum terpasang atau rusak (vendor/model-viewer.min.js)' + (e && e.message ? ' [' + e.message + ']' : '');
-    wrap.innerHTML = '';
-    wrap.appendChild(d);
-  }
-}
-
-/* =========================================================
-   MODAL "PILIH PRODUK UNTUK DIBANDINGKAN" (dari halaman detail)
-   ========================================================= */
-function openComparePopup(currentId){
-  popupAddedId = null;
-  if(!compareSet.has(currentId) && compareSet.size < 3){
-    compareSet.add(currentId);
-    popupAddedId = currentId;
-  }
-  renderModalList('');
-  el('modal-search').value = '';
-  el('modal-overlay').classList.add('show');
-  updateCompareUI();
-  renderModalFooter();
-}
-
-function cancelComparePopup(){
-  if(popupAddedId){
-    compareSet.delete(popupAddedId);
-    popupAddedId = null;
-    updateCompareUI();
-    renderGrid(allProducts);
-  }
-  el('modal-overlay').classList.remove('show');
-}
-
-function confirmComparePopup(){
-  popupAddedId = null;
-  el('modal-overlay').classList.remove('show');
-  openCompareView([...compareSet]);
-}
-  
-function renderModalList(query){
-  const q = query.toLowerCase();
-  const filtered = masterProducts.filter(p =>
-    (p.namaDasar + ' ' + p.model).toLowerCase().includes(q)
-  );
-  el('modal-list').innerHTML = filtered.map(p=>{
-    const checked = compareSet.has(p.id);
-    const disabled = !checked && compareSet.size >= 3;
-    return `
-    <label class="modal-row" style="opacity:${disabled?'.4':'1'}">
-      <div class="thumb-wrap">${thumbHtml(p.thumbnail)}</div>
-      <div class="info">
-        <p class="model">${p.model}</p>
-        <p class="harga">${priceRange(p)}</p>
-      </div>
-      <input type="checkbox" data-id="${p.id}" ${checked?'checked':''} ${disabled?'disabled':''}>
-    </label>`;
-  }).join('');
-  el('modal-list').querySelectorAll('input[type=checkbox]').forEach(cb=>{
-    cb.addEventListener('change', ()=>{
-      if(cb.checked) compareSet.add(cb.dataset.id);
-      else compareSet.delete(cb.dataset.id);
-      renderModalList(el('modal-search').value);
-      renderModalFooter();
-      updateCompareUI();
-    });
-  });
-}
-function renderModalFooter(){
-  el('modal-confirm').disabled = compareSet.size < 2;
-  el('modal-confirm').textContent = compareSet.size >= 2
-    ? `Lihat perbandingan (${compareSet.size})`
-    : 'Pilih minimal 2 produk';
-}
-el('modal-search').addEventListener('input', e => renderModalList(e.target.value));
-el('modal-close').addEventListener('click', cancelComparePopup);
-el('modal-overlay').addEventListener('click', e => { if(e.target.id === 'modal-overlay') cancelComparePopup(); });
-el('modal-confirm').addEventListener('click', confirmComparePopup);
-
-/* =========================================================
-   COMPARE VIEW
-   ========================================================= */
-  // ... lanjutkan dengan kode lama mulai dari "const specLabels = [];"
-  const specLabels = [];
-  items.forEach(m=>{
-    (m.spesifikasiDetail || []).forEach(s=>{
-      if(!specLabels.includes(s.label)) specLabels.push(s.label);
-    });
-  });
-  const specRowsHtml = specLabels.map(label=>{
-    const values = items.map(m=>{
-      const found = (m.spesifikasiDetail || []).find(s => s.label === label);
-      return found ? found.value : '-';
-    });
-    return compareRowHtml_(label, values);
-  }).join('');
-
-  // Harga: sel termurah diberi tanda khusus.
-  const hargaValues = items.map(m => priceRange(m));
-  const hargaClasses = compareCellClasses_(hargaValues);
-  const hargaMinList = items.map(m => m.hargaMin).filter(h => h > 0);
-  const termurah = hargaMinList.length ? Math.min(...hargaMinList) : null;
-  const hargaRowHtml = `<tr><td class="label">Harga</td>${items.map((m,i)=>{
-    const isTermurah = termurah !== null && m.hargaMin === termurah;
-    return `<td class="${hargaClasses[i]}${isTermurah ? ' cmp-best' : ''}">${hargaValues[i]}${isTermurah ? '<br><span class="cmp-tag">Termurah</span>' : ''}</td>`;
-  }).join('')}</tr>`;
-
-  const kategoriValues = items.map(m => m.kategori || '-');
-  const kategoriRowHtml = compareRowHtml_('Kategori', kategoriValues);
-
-  // Fallback catatan lama (kolom O) untuk produk yang belum punya spek terstruktur.
-  const adaCatatanLama = items.some(m => m.spesifikasi && m.spesifikasi.length);
-  const catatanRowHtml = adaCatatanLama
-    ? `<tr><td class="label">Catatan</td>${items.map(m=>`<td>${(m.spesifikasi||[]).length ? `<ul>${m.spesifikasi.slice(0,4).map(s=>`<li>${s}</li>`).join('')}</ul>` : '-'}</td>`).join('')}</tr>`
-    : '';
-
-  el('view-compare').innerHTML = `
-    <div id="compare-legend">
-      <span><i class="i-same"></i> Sama</span>
-      <span><i class="i-diff"></i> Beda</span>
-    </div>
-    <div style="overflow-x:auto;">
-      <table id="compare-table">
-        <tr><th class="label"></th>${items.map(m=>`<th><div class="thumb-wrap">${thumbHtml(m.thumbnail)}</div><p class="model-name">${m.model}</p></th>`).join('')}</tr>
-        ${kategoriRowHtml}
-        ${hargaRowHtml}
-        <tr><td class="label">Jumlah konfigurasi</td>${items.map(m=>`<td>${(m.varian || []).length}</td>`).join('')}</tr>
-        ${specRowsHtml}
-        ${catatanRowHtml}
-      </table>
-    </div>
-    <button id="clear-compare">Kosongkan perbandingan</button>
-  `;
-  document.getElementById('clear-compare').addEventListener('click', ()=>{
-    compareSet.clear();
-    updateCompareUI();
-    goHome();
-  });
 }
 
 /* =========================================================
