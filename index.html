@@ -1839,15 +1839,84 @@ function esc_(s){
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
 }
- 
-// "Display - Ukuran " == "display - ukuran" == "Display  -  Ukuran:"
+
+/* ---------- Kamus sinonim label spesifikasi ----------
+   Sumber utama: sheet SINONIM_SPEK di spreadsheet kerja, diambil lewat
+   ?action=aliasspek lalu disimpan di localStorage (kunjungan berikutnya
+   langsung memakai salinan terakhir, versi terbaru diambil di belakang layar).
+   Daftar di bawah hanya CADANGAN kalau sheet kosong / server belum terhubung.
+   Isi pertama tiap grup = nama baku. Semua nama lain di grup itu dianggap sama. */
+const ALIAS_CACHE_KEY = 'elitech_aliasspek_v1';
+let SPEC_ALIASES = [
+  ['heart rate', 'hr', 'denyut jantung', 'detak jantung'],
+  ['spo2', 'saturasi oksigen', 'oxygen saturation'],
+];
+try {
+  const c = JSON.parse(localStorage.getItem(ALIAS_CACHE_KEY) || 'null');
+  if (Array.isArray(c) && c.length) SPEC_ALIASES = c;
+} catch (e) {}
+
+let _aliasRules = [];
+const _escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function buildAliasRules_(groups){
+  _aliasRules = [];
+  (groups || []).forEach(g => {
+    if (!Array.isArray(g) || !g.length) return;
+    const canon = String(g[0]).toLowerCase().trim().replace(/\s+/g, '_');
+    g.forEach(a => {
+      a = String(a).toLowerCase().trim();
+      if (!a) return;
+      _aliasRules.push({
+        len: a.length, canon: canon,
+        // "_" dianggap huruf, supaya hasil ganti tidak dicocokkan ulang oleh aturan lain
+        re: new RegExp('(^|[^a-z0-9_])' + _escRe(a).replace(/\s+/g, '\\s+') + '(?=$|[^a-z0-9_])', 'g')
+      });
+    });
+  });
+  _aliasRules.sort((x, y) => y.len - x.len);   // frasa panjang dicocokkan dulu
+}
+buildAliasRules_(SPEC_ALIASES);
+
+// Ambil sinonim terbaru dari server (sheet SINONIM_SPEK). Dipanggil sekali saat init.
+async function loadSpekAlias(){
+  try {
+    const r = await fetch(API_BASE + '?action=aliasspek');
+    const data = await r.json();
+    if (!Array.isArray(data) || !data.length) return;
+    const txt = JSON.stringify(data);
+    let lama = null;
+    try { lama = localStorage.getItem(ALIAS_CACHE_KEY); } catch (e) {}
+    if (txt === lama) return;                       // tidak berubah
+    try { localStorage.setItem(ALIAS_CACHE_KEY, txt); } catch (e) {}
+    SPEC_ALIASES = data;
+    buildAliasRules_(SPEC_ALIASES);
+    // kalau sedang di halaman perbandingan, gambar ulang dengan alias baru
+    if (el('view-compare').classList.contains('active')) renderCompare_();
+  } catch (e) {}
+}
+
+const _UNIT_PAREN = /\(\s*(?:bpm|mmhg|kpa|%|°c|°f|kg|g|mm|cm|m|v|vac|vdc|w|va|hz|ml|l|lpm|mah|ah|inch|")\s*\)/g;
+const _STOP = new Set(['yang', 'dan', 'and', 'of', 'the', 'untuk', 'for', 'dengan']);
+
+// Kunci pencocokan label: huruf kecil, satuan dalam kurung dibuang, sinonim diseragamkan,
+// kata sambung dibuang, urutan kata tidak berpengaruh. Label yang TAMPIL tetap label asli.
+// "Display - Ukuran " == "display - ukuran" == "Ukuran - Display:"-nya tidak disamakan
+// (bagian sebelum dan sesudah " - " tetap berbeda posisi), tapi urutan kata di dalam
+// tiap bagian bebas.
 function cmpNormLabel_(s){
-  return String(s == null ? '' : s).toLowerCase()
+  const t = String(s == null ? '' : s).toLowerCase()
     .replace(/\u00a0/g, ' ')
-    .replace(/\s+-\s+/g, ' - ')
-    .replace(/\s+/g, ' ')
-    .replace(/[:\s]+$/, '')
-    .trim();
+    .replace(_UNIT_PAREN, ' ')       // buang satuan di kurung
+    .replace(/[\/,;:]/g, ' ');
+  return t.split(/\s+-\s+/).map(part => {
+    let x = ' ' + part + ' ';
+    _aliasRules.forEach(r => { x = x.replace(r.re, '$1' + r.canon); });
+    return x.split(/[^a-z0-9_]+/)
+      .filter(w => w && !_STOP.has(w))
+      .sort()                         // urutan kata tidak berpengaruh
+      .join(' ');
+  }).filter(Boolean).join(' - ');
 }
  
 // Nilai dibandingkan tanpa peduli huruf besar/kecil, spasi, dan urutan "a; b".
@@ -2133,6 +2202,14 @@ function renderCompare_(){
  
   const colN = items.length;
   const sp = cmpBuildSpec_(items);
+
+  // Bantu mengisi sheet SINONIM_SPEK: baris yang hanya dimiliki 1 produk = kandidat sinonim yang belum terdaftar
+  if (sp.nAct >= 2){
+    console.table(sp.rows
+      .filter(r => r.values.filter(v => v !== null).length === 1)
+      .map(r => ({ label: r.label, hanyaDi: cleanName(items[r.values.findIndex(v => v !== null)].model) })));
+  }
+
   const sum = cmpSummary_(items, sp);
   const onlyDiff = cmpOnlyDiff && sp.nAct >= 2;
  
@@ -2323,6 +2400,7 @@ bindFilters();
     }
   }
   notifyReady();
+  loadSpekAlias();     // sinonim label spek dari sheet SINONIM_SPEK (di belakang layar)
   prefetchThumbs();
 })();
 
