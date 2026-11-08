@@ -4,22 +4,68 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Katalog Produk Elitech</title>
+<script>
+  /* Tema dipasang SEBELUM CSS dimuat supaya tidak ada kedipan putih.
+     Sumber: localStorage 'elitech_theme' (satu origin dengan shell), lalu dikoreksi
+     lewat pesan {__elitech:'theme'} dari shell. */
+  (function () {
+    var d = document.documentElement;
+    function pref() { try { return localStorage.getItem('elitech_theme') || 'auto'; } catch (e) { return 'auto'; } }
+    function resolve(p) { return p === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : p; }
+    window.__setTheme = function (t) { d.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light'); };
+    window.__setTheme(resolve(pref()));
+    var mq = matchMedia('(prefers-color-scheme: dark)');
+    var h = function () { if (pref() === 'auto') window.__setTheme(resolve('auto')); };
+    if (mq.addEventListener) mq.addEventListener('change', h); else if (mq.addListener) mq.addListener(h);
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
+    color-scheme:light;
     --brand:#364fab;
     --brand-fg:#ffffff;
     --brand-soft:#eef0f9;
     --bg:#ffffff;
+    --card:#ffffff;
+    --bar:rgba(255,255,255,0.92);
+    --overlay:rgba(255,255,255,0.97);
     --surface:#f5f6f9;
+    --lbl-bg:#fafbfc;
     --text:#14151a;
     --text-2:#6b7280;
     --text-3:#9aa0ac;
     --border:#e6e8ee;
+    --scrim:rgba(20,21,26,.4);
+    --pop-shadow:0 1px 4px rgba(20,21,26,.12);
+    --same-bg:#eef9f0;--same-bd:#b7e4c0;
+    --diff-bg:#fff5e9;--diff-bd:#ffcf8a;
+    --warn-bg:#fff5e9;--warn-bd:#ffcf8a;--warn-tx:#7a4a00;
     --radius:14px;
     --morph:0.55s cubic-bezier(.4,0,.2,1);
+  }
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --brand:#8da2f7;
+    --brand-fg:#0f1117;
+    --brand-soft:#222a4a;
+    --bg:#0f1117;
+    --card:#171a23;
+    --bar:rgba(15,17,23,0.92);
+    --overlay:rgba(23,26,35,0.96);
+    --surface:#1e2230;
+    --lbl-bg:#141720;
+    --text:#e8eaf0;
+    --text-2:#a3a9b8;
+    --text-3:#6f7686;
+    --border:#2c3142;
+    --scrim:rgba(0,0,0,.62);
+    --pop-shadow:0 1px 4px rgba(0,0,0,.45);
+    --same-bg:#16301f;--same-bd:#2d5a3b;
+    --diff-bg:#3a2a12;--diff-bd:#7a5420;
+    --warn-bg:#3a2a12;--warn-bd:#7a5420;--warn-tx:#f3c987;
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;}
@@ -27,12 +73,13 @@
   input,select{font-family:inherit;}
   a{color:inherit;}
   ::selection{background:var(--brand-soft);}
+  button:focus-visible,select:focus-visible,input:focus-visible,.card:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}
 
   .container{max-width:1080px;margin:0 auto;padding:0 16px 48px;}
 
   /* ---------- Top bar ---------- */
   #topbar{
-    position:sticky;top:0;z-index:30;background:rgba(255,255,255,0.92);backdrop-filter:blur(8px);
+    position:sticky;top:0;z-index:30;background:var(--bar);backdrop-filter:blur(8px);
     border-bottom:1px solid var(--border);
   }
   #topbar-inner{max-width:1080px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:10px;height:44px;}
@@ -50,6 +97,7 @@
     overflow:hidden;transition:width var(--morph);flex-shrink:0;
   }
   #search-input{border:none;background:transparent;flex:1;min-width:0;height:100%;font-size:14px;outline:none;width:0;padding:0;color:var(--text);}
+  #search-input::placeholder{color:var(--text-3);}
   #search-toggle{width:38px;height:38px;flex-shrink:0;}
 
   /* ---------- Views ---------- */
@@ -97,11 +145,11 @@
   .card img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
   .card .ph-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-3);}
   .card .cmp-toggle{
-    position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;background:#ffffff;
-    box-shadow:0 1px 4px rgba(20,21,26,.12);display:flex;align-items:center;justify-content:center;transition:opacity .2s;
+    position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;background:var(--card);
+    box-shadow:var(--pop-shadow);display:flex;align-items:center;justify-content:center;transition:opacity .2s;
   }
   .card .overlay{
-    position:absolute;left:0;right:0;bottom:0;height:26%;background:rgba(255,255,255,0.97);
+    position:absolute;left:0;right:0;bottom:0;height:26%;background:var(--overlay);
     padding:7px 10px;display:flex;flex-direction:column;justify-content:center;
   }
   .card .overlay .kat{font-size:10px;color:var(--brand);margin:0 0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -138,9 +186,9 @@
   .h-sub{font-size:13px;color:var(--text-2);margin:0 0 16px;}
 
   #variant-area{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
-  .variant-box{font-size:13px;padding:9px 14px;border-radius:9px;border:1px solid var(--border);background:#fff;}
+  .variant-box{font-size:13px;padding:9px 14px;border-radius:9px;border:1px solid var(--border);background:var(--card);}
   .variant-box.active{background:var(--brand);color:var(--brand-fg);border-color:var(--brand);}
-  #variant-select{width:100%;height:44px;font-size:14px;border:1px solid var(--border);border-radius:9px;padding:0 12px;background:#fff;margin-bottom:16px;}
+  #variant-select{width:100%;height:44px;font-size:14px;border:1px solid var(--border);border-radius:9px;padding:0 12px;background:var(--card);color:var(--text);margin-bottom:16px;}
 
   .price-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
   .price-row .lbl{font-size:11px;color:var(--text-3);margin:0;}
@@ -175,17 +223,18 @@
 
   /* ---------- Modal (popup bandingkan) ---------- */
   #modal-overlay{
-    display:none;position:fixed;inset:0;background:rgba(20,21,26,.4);z-index:50;align-items:flex-end;justify-content:center;
+    display:none;position:fixed;inset:0;background:var(--scrim);z-index:50;align-items:flex-end;justify-content:center;
   }
   #modal-overlay.show{display:flex;}
   #modal{
-    background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:80vh;display:flex;flex-direction:column;
+    background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:80vh;display:flex;flex-direction:column;
     animation:modalUp .4s cubic-bezier(.4,0,.2,1);
   }
   @keyframes modalUp{from{transform:translateY(30px);opacity:0;}to{transform:translateY(0);opacity:1;}}
   #modal-header{padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
   #modal-header h3{margin:0;font-size:15px;}
-  #modal-search{height:40px;border:1px solid var(--border);border-radius:9px;padding:0 12px;font-size:14px;margin:12px 16px;width:calc(100% - 32px);}
+  #modal-search{height:40px;border:1px solid var(--border);border-radius:9px;padding:0 12px;font-size:14px;margin:12px 16px;width:calc(100% - 32px);background:var(--bg);color:var(--text);}
+  #modal-search::placeholder{color:var(--text-3);}
   #modal-list{overflow-y:auto;padding:0 16px;flex:1;}
   .modal-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
   .modal-row .thumb-wrap{position:relative;width:44px;height:44px;border-radius:8px;overflow:hidden;background:var(--surface);flex-shrink:0;}
@@ -207,24 +256,24 @@
   #compare-table .thumb-wrap img,#compare-table .thumb-wrap .ph-icon{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:flex;align-items:center;justify-content:center;}
   #compare-table .model-name{font-weight:600;font-size:12px;margin-top:6px;}
   #compare-table ul{margin:0;padding-left:14px;text-align:left;font-size:12px;color:var(--text-2);}
-  #compare-table td.cmp-same{background:#eef9f0;}
-  #compare-table td.cmp-diff{background:#fff5e9;}
+  #compare-table td.cmp-same{background:var(--same-bg);}
+  #compare-table td.cmp-diff{background:var(--diff-bg);}
   #compare-table td.cmp-missing{color:var(--text-3);}
   #compare-table td.cmp-best{font-weight:700;color:var(--brand);}
-  .cmp-tag{display:inline-block;font-size:9px;font-weight:600;background:var(--brand);color:#fff;padding:2px 6px;border-radius:999px;margin-top:3px;}
+  .cmp-tag{display:inline-block;font-size:9px;font-weight:600;background:var(--brand);color:var(--brand-fg);padding:2px 6px;border-radius:999px;margin-top:3px;}
   #compare-legend{font-size:12px;color:var(--text-2);margin:0 0 14px;display:flex;gap:16px;}
   #compare-legend span{display:inline-flex;align-items:center;gap:5px;}
   #compare-legend i{width:11px;height:11px;border-radius:3px;display:inline-block;}
-  #compare-legend .i-same{background:#eef9f0;border:1px solid #b7e4c0;}
-  #compare-legend .i-diff{background:#fff5e9;border:1px solid #ffcf8a;}
+  #compare-legend .i-same{background:var(--same-bg);border:1px solid var(--same-bd);}
+  #compare-legend .i-diff{background:var(--diff-bg);border:1px solid var(--diff-bd);}
   #compare-empty{text-align:center;color:var(--text-3);padding:48px 0;font-size:14px;}
   #clear-compare{width:100%;margin-top:16px;padding:12px;border-radius:9px;background:var(--surface);font-size:13px;font-weight:600;}
 
   /* ---------- Kelompok varian ---------- */
-  .card .badge{position:absolute;top:8px;left:8px;background:#fff;color:var(--brand);font-size:10px;font-weight:600;padding:3px 8px;border-radius:999px;box-shadow:0 1px 4px rgba(20,21,26,.12);}
+  .card .badge{position:absolute;top:8px;left:8px;background:var(--card);color:var(--brand);font-size:10px;font-weight:600;padding:3px 8px;border-radius:999px;box-shadow:var(--pop-shadow);}
   .cfg-label{font-size:11px;color:var(--text-3);margin:0 0 6px;}
   #cfg-area{display:flex;flex-wrap:wrap;gap:10px 8px;margin-bottom:16px;padding-top:8px;}
-  .cfg-chip{position:relative;font-size:12px;padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:#fff;text-align:left;line-height:1.3;}
+  .cfg-chip{position:relative;font-size:12px;padding:8px 12px;border-radius:9px;border:1px solid var(--border);background:var(--card);text-align:left;line-height:1.3;}
   .cfg-chip.active{background:var(--brand);color:var(--brand-fg);border-color:var(--brand);}
   /* tanda best price pada chip konfigurasi (gambar assets/BEST_PRICE.png) */
   .cfg-chip.has-best{padding-right:22px;}
@@ -232,7 +281,7 @@
 
   /* ---------- Tombol mode tampilan (Foto / 360 / 3D) ---------- */
   .vbtns{display:flex;gap:8px;margin:10px 0 0;}
-  .vbtn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:42px;padding:0 12px;border-radius:12px;border:1px solid var(--border);background:#fff;color:var(--text);font-size:13px;font-weight:600;transition:background .2s,color .2s,border-color .2s,transform .1s;}
+  .vbtn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;height:42px;padding:0 12px;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:600;transition:background .2s,color .2s,border-color .2s,transform .1s;}
   .vbtn:hover{background:var(--surface);}
   .vbtn:active{transform:scale(.97);}
   .vbtn.active{background:var(--brand);color:var(--brand-fg);border-color:var(--brand);}
@@ -241,7 +290,7 @@
   /* ---------- Viewer 360 / 3D ---------- */
   .v360,.v3d{position:relative;border-radius:var(--radius);overflow:hidden;background:var(--surface);}
   .v360 canvas{width:100%;height:100%;display:block;cursor:grab;touch-action:pan-y;}
-  .v360-bar{position:absolute;left:0;right:0;bottom:0;padding:8px 12px;font-size:11px;color:var(--text-2);display:flex;gap:10px;align-items:center;background:linear-gradient(transparent,rgba(255,255,255,.92));pointer-events:none;}
+  .v360-bar{position:absolute;left:0;right:0;bottom:0;padding:8px 12px;font-size:11px;color:var(--text-2);display:flex;gap:10px;align-items:center;background:linear-gradient(transparent,var(--bar));pointer-events:none;}
   .v360-prog{flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
   .v360-prog i{display:block;height:100%;width:0;background:var(--brand);}
   .v3d{aspect-ratio:4/3;}
@@ -249,8 +298,8 @@
   .v3d-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;text-align:center;font-size:13px;color:var(--text-2);}
 
   /* ---------- Layar penuh viewer ---------- */
-  .vfs-btn{position:absolute;top:8px;right:8px;z-index:3;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.92);box-shadow:0 1px 4px rgba(20,21,26,.18);display:flex;align-items:center;justify-content:center;color:#14151a;}
-  .vfs-on{position:fixed !important;inset:0;z-index:200;width:100vw;height:100vh;height:100dvh;border-radius:0 !important;aspect-ratio:auto !important;background:#fff;}
+  .vfs-btn{position:absolute;top:8px;right:8px;z-index:3;width:34px;height:34px;border-radius:50%;background:var(--bar);box-shadow:var(--pop-shadow);display:flex;align-items:center;justify-content:center;color:var(--text);}
+  .vfs-on{position:fixed !important;inset:0;z-index:200;width:100vw;height:100vh;height:100dvh;border-radius:0 !important;aspect-ratio:auto !important;background:var(--bg);}
   .vfs-on .vfs-btn{top:calc(10px + env(safe-area-inset-top,0px));right:10px;}
   .v360.vfs-on canvas{object-fit:contain;touch-action:none;}
   .v360.vfs-on .v360-bar{padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));}
@@ -272,7 +321,7 @@
 .price-lbl{display:flex;justify-content:space-between;font-size:12px;color:var(--text-3);margin-top:4px;}
 #f-reset{width:100%;padding:10px;border-radius:9px;background:var(--surface);font-size:13px;font-weight:600;}
 #result-bar{align-items:center;gap:12px;margin-bottom:12px;font-size:13px;color:var(--text-2);}
-#f-sort{margin-left:auto;border:1px solid var(--border);background:#fff;border-radius:9px;padding:8px 12px;font-size:13px;color:var(--text);}
+#f-sort{margin-left:auto;border:1px solid var(--border);background:var(--card);border-radius:9px;padding:8px 12px;font-size:13px;color:var(--text);}
 #active-filters{flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;}
 #active-filters:empty{display:none;}
 .af-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:var(--brand);color:var(--brand-fg);font-size:12px;}
@@ -343,14 +392,14 @@
 /* Badge best price: label + nominal, dengan tag gambar di kiri */
 .bp-badge{position:absolute;left:16px;bottom:calc(26% + 10px);z-index:2;display:flex;flex-direction:column;box-shadow:0 1px 5px rgba(20,21,26,.2);border-radius:8px;pointer-events:none;}
 .bp-badge .bp-top{background:var(--brand);color:var(--brand-fg);font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 10px 2px 26px;border-radius:8px 8px 0 0;white-space:nowrap;}
-.bp-badge .bp-price{background:#fff;color:var(--brand);font-size:12px;font-weight:700;padding:3px 10px 4px 26px;border-radius:0 0 8px 8px;white-space:nowrap;}
+.bp-badge .bp-price{background:var(--card);color:var(--brand);font-size:12px;font-weight:700;padding:3px 10px 4px 26px;border-radius:0 0 8px 8px;white-space:nowrap;}
 .bp-badge .bp-img{position:absolute;left:-14px;bottom:-8px;width:36px;height:auto;filter:drop-shadow(0 1px 2px rgba(20,21,26,.25));}
 .hero-slider .bp-badge{bottom:34px;left:22px;}
 
   #compare-bar button:disabled{opacity:.4;cursor:not-allowed;}
  
 /* peringatan lintas kategori */
-.cmp-warn{margin:0 0 12px;padding:10px 14px;border-radius:var(--radius);background:#fff5e9;border:1px solid #ffcf8a;color:#7a4a00;font-size:13px;line-height:1.45;}
+.cmp-warn{margin:0 0 12px;padding:10px 14px;border-radius:var(--radius);background:var(--warn-bg);border:1px solid var(--warn-bd);color:var(--warn-tx);font-size:13px;line-height:1.45;}
  
 /* ringkasan */
 .cmp-summary{background:var(--brand-soft);border-radius:var(--radius);padding:14px 16px;margin:0 0 14px;}
@@ -370,11 +419,11 @@
 #cmp-share:hover{opacity:.9;}
  
 /* tabel: scroll di dalam kotak supaya header & kolom label bisa menempel */
-.cmp-scroll{overflow:auto;max-height:78vh;border:1px solid var(--border);border-radius:var(--radius);background:#fff;-webkit-overflow-scrolling:touch;}
+.cmp-scroll{overflow:auto;max-height:78vh;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);-webkit-overflow-scrolling:touch;}
 #compare-table{border-collapse:separate;border-spacing:0;}
-#compare-table thead th{position:sticky;top:0;z-index:2;background:#fff;padding-top:14px;border-bottom:1px solid var(--border);}
+#compare-table thead th{position:sticky;top:0;z-index:2;background:var(--bg);padding-top:14px;border-bottom:1px solid var(--border);}
 #compare-table thead th.label{left:0;z-index:3;}
-#compare-table td.label{position:sticky;left:0;z-index:1;background:#fff;}
+#compare-table td.label{position:sticky;left:0;z-index:1;background:var(--bg);}
 #compare-table td{word-break:break-word;}
  
 /* header produk */
@@ -422,7 +471,7 @@
 .cmp-mini-wrap{position:sticky;top:var(--tb,65px);z-index:20;height:0;}
 .cmp-mini{
   position:absolute;left:1px;right:1px;top:0;display:grid;align-items:center;
-  background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  background:var(--bar);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
   border-bottom:1px solid var(--border);border-radius:0 0 var(--radius) var(--radius);
   box-shadow:0 8px 18px rgba(20,21,26,.10);
   opacity:0;transform:translateY(-8px);pointer-events:none;
@@ -441,7 +490,7 @@
 @media (prefers-reduced-motion:reduce){.cmp-mini{transition:none;}}
 
 /* ponsel: nama spesifikasi di atas nilai, tiap produk dapat lebar penuh 1/N */
-#compare-table tr.cmp-lbl td{background:#fafbfc;color:var(--text-2);font-size:11.5px;font-weight:600;text-align:left;padding:7px 8px 2px;border-bottom:0;}
+#compare-table tr.cmp-lbl td{background:var(--lbl-bg);color:var(--text-2);font-size:11.5px;font-weight:600;text-align:left;padding:7px 8px 2px;border-bottom:0;}
 #compare-table tr.cmp-lbl + tr td{padding-top:3px;}
 #compare-table tr.cmp-sec td{position:static;}
 
@@ -451,6 +500,10 @@ details.cmp-summary > summary::-webkit-details-marker{display:none;}
 details.cmp-summary > summary::after{content:'';width:8px;height:8px;border-right:2px solid var(--brand);border-bottom:2px solid var(--brand);transform:rotate(45deg);margin:-3px 4px 0 0;transition:transform .2s;}
 details.cmp-summary[open] > summary::after{transform:rotate(-135deg);margin-top:3px;}
 details.cmp-summary:not([open]) > summary{margin:0;}
+
+/* ---------- Mode gelap: penyesuaian kecil ---------- */
+:root[data-theme="dark"] .card:hover{box-shadow:0 12px 26px rgba(0,0,0,.5);}
+:root[data-theme="dark"] .cmp-mini{box-shadow:0 8px 18px rgba(0,0,0,.45);}
 </style>
 </head>
 <body>
@@ -2448,7 +2501,7 @@ function updateCompareUI(){
 }
 
 /* =========================================================
-   MODE PRESENTASI + KOMUNIKASI DENGAN SHELL
+   MODE PRESENTASI + TEMA + KOMUNIKASI DENGAN SHELL
    ========================================================= */
 function setPresentasi(on){
   on = !!on;
@@ -2463,11 +2516,13 @@ function setPresentasi(on){
   }
   if (el('view-compare').classList.contains('active') && cmpItems.length >= 2) renderCompare_();
 }
-// hanya terima pesan dari halaman induk (shell)
+// hanya terima pesan dari halaman induk (shell): mode presentasi & tema
 window.addEventListener('message', e => {
   if (e.source !== window.parent) return;
   const d = e.data;
-  if (d && d.__elitech === 'mode') setPresentasi(d.presentasi);
+  if (!d) return;
+  if (d.__elitech === 'mode') setPresentasi(d.presentasi);
+  else if (d.__elitech === 'theme' && window.__setTheme) window.__setTheme(d.theme);
 });
 
 /* =========================================================
