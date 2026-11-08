@@ -103,8 +103,48 @@
   /* ---------- Views ---------- */
   .view{display:none;}
   .view.active{display:block;}
-  .view-transition{animation:viewIn var(--morph) both;}
-  @keyframes viewIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+
+  /* ================= ANIMASI PINDAH HALAMAN (±1 detik) ================= */
+  /* fill-mode 'backwards' (bukan 'both'), jadi tidak ada transform permanen yang
+     mengurung layar penuh 360/3D (position:fixed). */
+  .view.view-out{animation:viewOut .3s ease forwards;pointer-events:none;}
+  @keyframes viewOut{to{opacity:0;transform:translateY(-10px);}}
+
+  .view-transition{animation:viewIn .7s cubic-bezier(.22,.8,.3,1) backwards;}
+  @keyframes viewIn{from{opacity:0;transform:translateY(16px);}}
+  @keyframes fadeOnly{from{opacity:0;}}
+  @keyframes riseIn{from{opacity:0;transform:translateY(18px);}}
+
+  /* Detail & perbandingan: wadahnya hanya memudar, isinya naik berurutan */
+  #view-detail.view-transition,
+  #view-compare.view-transition{animation:fadeOnly .45s ease backwards;}
+
+  #view-detail.view-transition .d-left,
+  #view-detail.view-transition .d-right > *{animation:riseIn .6s cubic-bezier(.22,.8,.3,1) backwards;}
+  #view-detail.view-transition .d-right > *:nth-child(2){animation-delay:.05s;}
+  #view-detail.view-transition .d-right > *:nth-child(3){animation-delay:.10s;}
+  #view-detail.view-transition .d-right > *:nth-child(4){animation-delay:.15s;}
+  #view-detail.view-transition .d-right > *:nth-child(5){animation-delay:.20s;}
+  #view-detail.view-transition .d-right > *:nth-child(6){animation-delay:.25s;}
+  #view-detail.view-transition .d-right > *:nth-child(n+7){animation-delay:.30s;}
+
+  #view-compare.view-transition > *{animation:riseIn .6s cubic-bezier(.22,.8,.3,1) backwards;}
+  #view-compare.view-transition > *:nth-child(2){animation-delay:.06s;}
+  #view-compare.view-transition > *:nth-child(3){animation-delay:.12s;}
+  #view-compare.view-transition > *:nth-child(4){animation-delay:.18s;}
+  #view-compare.view-transition > *:nth-child(n+5){animation-delay:.24s;}
+
+  /* Kartu produk masuk berurutan (hanya saat grid diberi kelas .stagger) */
+  @keyframes cardIn{from{opacity:0;transform:translateY(18px) scale(.97);}}
+  #grid.stagger .card{animation:cardIn .6s cubic-bezier(.22,.8,.3,1) backwards;animation-delay:calc(var(--i,0) * 40ms);}
+
+  @media (prefers-reduced-motion:reduce){
+    .view.view-out,.view-transition,
+    #view-detail.view-transition .d-left,
+    #view-detail.view-transition .d-right > *,
+    #view-compare.view-transition > *,
+    #grid.stagger .card{animation:none !important;}
+  }
 
   /* ---------- Category banner + chips ---------- */
   #category-banner{
@@ -895,20 +935,46 @@ el('page-title').addEventListener('click', goHome);
 el('back-btn').addEventListener('click', goHome);
 
 /* =========================================================
-   VIEW SWITCHING (morph)
+   VIEW SWITCHING (morph, ±1 detik: 0,3 dtk keluar + 0,7 dtk masuk)
    ========================================================= */
-function switchView(name, title, showBack){
+const VIEW_OUT_MS = 300;   // lama halaman lama memudar keluar (ms). Masuknya 700 ms (lihat CSS .view-transition)
+let viewSwitchToken = 0;
+
+function replayIn(node){
+  node.classList.remove('view-transition');
+  void node.offsetWidth;                      // paksa browser menghitung ulang agar animasi diputar lagi
+  node.classList.add('view-transition');
+}
+
+function switchView(name, title, showBack, afterShow){
   exitAllFs();
-  ['grid','detail','compare'].forEach(v=>{
-    const node = el('view-' + v);
-    node.classList.toggle('active', v === name);
-    node.classList.remove('view-transition');
-  });
-  requestAnimationFrame(()=> el('view-' + name).classList.add('view-transition'));
+  const token = ++viewSwitchToken;            // klik cepat / swipe-back berulang: hanya yang terakhir berlaku
+  const views = ['grid', 'detail', 'compare'].map(v => el('view-' + v));
+  const cur  = views.find(n => n.classList.contains('active'));
+  const next = el('view-' + name);
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   el('page-title').textContent = title;
   el('back-btn').style.display = showBack ? 'flex' : 'none';
   el('compare-icon').style.display = name === 'compare' ? 'none' : 'flex';
-  window.scrollTo({top:0, behavior:'smooth'});
+
+  function show(){
+    if(token !== viewSwitchToken) return;
+    views.forEach(n => {
+      n.classList.remove('view-out', 'view-transition');
+      n.classList.toggle('active', n === next);
+    });
+    window.scrollTo(0, 0);
+    if(typeof afterShow === 'function') afterShow();
+    replayIn(next);
+  }
+
+  if(cur && cur !== next && !reduce){
+    cur.classList.add('view-out');
+    setTimeout(show, VIEW_OUT_MS);
+  } else {
+    show();
+  }
 }
 
 // Tombol kembali / judul: mundur ke grid lewat riwayat browser (popstate
@@ -918,11 +984,11 @@ function goHome(){
   showGrid();
 }
 function showGrid(){
-  switchView('grid', 'Katalog Elitech', false);
-  collapseSearch();
   updateCompareUI();
-  renderGrid(allProducts);
-  requestAnimationFrame(()=> window.scrollTo(0, gridScroll));
+  lastGridAnim = 0;                           // kembali ke grid: kartu selalu masuk berurutan
+  renderGrid(allProducts, true);
+  collapseSearch();
+  switchView('grid', 'Katalog Elitech', false, () => window.scrollTo(0, gridScroll));
 }
 
 // Setiap masuk ke detail / perbandingan dicatat sebagai satu langkah riwayat.
@@ -1036,9 +1102,9 @@ function refreshGrid(){
   if (sortMode === 'default' && !q){
     list = [...list].sort((a, b) => (famBest(famMap[b._fam]) > 0) - (famBest(famMap[a._fam]) > 0));
   }
-  
+
   allProducts = list;
-  renderGrid(list);
+  renderGrid(list, true);                     // true = boleh beranimasi (dibatasi di renderGrid)
   updateResultBar();
 }
 
@@ -1120,8 +1186,18 @@ function wrapDetailColumns(){
   v.append(left, right);
 }
 
-function renderGrid(products){
+// Animasi kartu hanya diputar kalau diminta DAN sudah >1,2 detik sejak animasi terakhir,
+// jadi geser slider harga / mengetik pencarian tidak membuat kartu berkedip terus.
+// Tap ikon bandingkan memanggil renderGrid tanpa argumen -> tidak beranimasi.
+let lastGridAnim = 0;
+
+function renderGrid(products, animate){
   const grid = el('grid');
+  const now = Date.now();
+  const anim = !!animate && (now - lastGridAnim > 1200);
+  if(anim) lastGridAnim = now;
+  grid.classList.toggle('stagger', anim);     // harus dipasang SEBELUM innerHTML diisi
+
   if(products.length === 0){
     grid.innerHTML = '<p class="empty-state">Produk tidak ditemukan.</p>';
     return;
@@ -1130,7 +1206,7 @@ function renderGrid(products){
   products.forEach(p => { if(!leads.has(p._fam)) leads.set(p._fam, p); });
   const arr = [...leads.values()];
 
-  const cardHtml = p => {
+  const cardHtml = (p, i) => {
     const f = famMap[p._fam];
     const multi = f.members.length > 1;
     const thumb = p.thumbnail || f.thumb;
@@ -1138,7 +1214,7 @@ function renderGrid(products){
     const disabled = !compareSet.has(p.id) && compareSet.size >= 3;
     const best = famBest(f) > 0;
     return `
-    <div class="card" data-id="${p.id}">
+    <div class="card" data-id="${p.id}" style="--i:${Math.min(i || 0, 10)}">
       ${thumb ? `<img src="${thumb}" alt="" loading="lazy" onerror="handleImgError(this)">` : `<div class="ph-icon">${icon('box')}</div>`}
       ${multi ? `<span class="badge">${f.members.length} varian</span>` : ''}
       ${best ? bestBadgeHtml(multi ? 'Mulai ' : '', famBest(f)) : ''}
@@ -1223,6 +1299,7 @@ function swapDetail(id){
   history.replaceState(Object.assign({}, history.state, { id: id }), '');
   el('page-title').textContent = cleanName(p.model);
   renderDetail(withModelLain(p));
+  replayIn(el('view-detail'));                // ganti konfigurasi: isi detail ikut beranimasi
 }
 
 async function openDetail(id, noPush){
