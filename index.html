@@ -401,6 +401,54 @@
   .cmp-summary ul{font-size:14px;}
 }
   
+
+/* =========================================================
+   PERBANDINGAN v2: tanpa scroll bersarang, header mini menempel saat scroll
+   ========================================================= */
+#view-compare{--cmp-lbl:150px;}
+@media (min-width:900px){ #view-compare{--cmp-lbl:200px;} }
+
+.cmp-scroll{overflow:clip;max-height:none;}
+#compare-table{width:100%;table-layout:fixed;min-width:0 !important;}
+#compare-table th{min-width:0;}
+#compare-table thead th{position:relative;}
+#compare-table thead th.label,#compare-table td.label{position:static;width:auto;}
+#compare-table td{overflow-wrap:anywhere;word-break:normal;}
+#compare-table td.label{font-size:12.5px;}
+
+/* header mini: tetap ada foto + nama + harga sebagai acuan saat tabel di-scroll */
+.cmp-mini-wrap{position:sticky;top:var(--tb,65px);z-index:20;height:0;}
+.cmp-mini{
+  position:absolute;left:1px;right:1px;top:0;display:grid;align-items:center;
+  background:rgba(255,255,255,.96);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border);border-radius:0 0 var(--radius) var(--radius);
+  box-shadow:0 8px 18px rgba(20,21,26,.10);
+  opacity:0;transform:translateY(-8px);pointer-events:none;
+  transition:opacity .2s ease,transform .2s ease;
+}
+.cmp-mini.show{opacity:1;transform:none;pointer-events:auto;cursor:pointer;}
+.cmp-mini-item{display:flex;align-items:center;gap:8px;padding:6px 8px;min-width:0;}
+.cmp-mini .thumb-wrap{position:relative;width:34px;height:34px;flex:none;border-radius:8px;overflow:hidden;background:var(--surface);}
+.cmp-mini .thumb-wrap img,.cmp-mini .thumb-wrap .ph-icon{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:flex;align-items:center;justify-content:center;}
+.cmp-mini-txt{min-width:0;display:flex;flex-direction:column;line-height:1.25;}
+.cmp-mini-txt b{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cmp-mini-txt span.cfg{color:var(--brand);font-weight:600;font-size:10px;}
+@media (max-width:639px){ .cmp-mini .thumb-wrap{width:28px;height:28px;border-radius:7px;} .cmp-mini-item{gap:6px;padding:6px;} .cmp-mini-txt b{font-size:11px;} }
+.cmp-mini-txt span{font-size:10.5px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cmp-mini-txt span.best{color:var(--brand);font-weight:600;}
+@media (prefers-reduced-motion:reduce){.cmp-mini{transition:none;}}
+
+/* ponsel: nama spesifikasi di atas nilai, tiap produk dapat lebar penuh 1/N */
+#compare-table tr.cmp-lbl td{background:#fafbfc;color:var(--text-2);font-size:11.5px;font-weight:600;text-align:left;padding:7px 8px 2px;border-bottom:0;}
+#compare-table tr.cmp-lbl + tr td{padding-top:3px;}
+#compare-table tr.cmp-sec td{position:static;}
+
+/* ringkasan bisa dilipat */
+details.cmp-summary > summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;margin:0 0 8px;}
+details.cmp-summary > summary::-webkit-details-marker{display:none;}
+details.cmp-summary > summary::after{content:'';width:8px;height:8px;border-right:2px solid var(--brand);border-bottom:2px solid var(--brand);transform:rotate(45deg);margin:-3px 4px 0 0;transition:transform .2s;}
+details.cmp-summary[open] > summary::after{transform:rotate(-135deg);margin-top:3px;}
+details.cmp-summary:not([open]) > summary{margin:0;}
 </style>
 </head>
 <body>
@@ -2074,9 +2122,11 @@ function cmpSummary_(items, sp){
 function cmpTopRowsHtml_(items){
   const colN = items.length, P = cmpPrices_(items);
   const cls = vals => (new Set(vals.map(cmpNormVal_)).size === 1 ? 'cmp-same' : 'cmp-diff');
-  const row = (label, cells) => '<tr><td class="label">' + label + '</td>' + cells.join('') + '</tr>';
+  const row = (label, cells) => CMP_MOB
+    ? '<tr class="cmp-lbl"><td colspan="' + colN + '">' + label + '</td></tr><tr>' + cells.join('') + '</tr>'
+    : '<tr><td class="label">' + label + '</td>' + cells.join('') + '</tr>';
  
-  let h = '<tr class="cmp-sec"><td colspan="' + (colN + 1) + '">Ringkasan</td></tr>';
+  let h = '<tr class="cmp-sec"><td colspan="' + cmpSpan_(colN) + '">Ringkasan</td></tr>';
  
   const kat = items.map(m => m.kategori || '-');
   const c1 = cls(kat);
@@ -2134,9 +2184,11 @@ function cmpSpecRowsHtml_(sp, onlyDiff, colN){
  
   let html = '';
   sections.forEach((rs, head) => {
-    html += '<tr class="cmp-sec"><td colspan="' + (colN + 1) + '">' + esc_(head) + '</td></tr>';
+    html += '<tr class="cmp-sec"><td colspan="' + cmpSpan_(colN) + '">' + esc_(head) + '</td></tr>';
     rs.forEach(r => {
-      html += '<tr><td class="label">' + esc_(r.sub) + '</td>' + r.values.map((v, i) => {
+      html += (CMP_MOB
+        ? '<tr class="cmp-lbl"><td colspan="' + colN + '">' + esc_(r.sub) + '</td></tr><tr>'
+        : '<tr><td class="label">' + esc_(r.sub) + '</td>') + r.values.map((v, i) => {
         if (!sp.hasSpec[i]) return '<td class="cmp-nodata">—</td>';
         if (v === null)     return '<td class="cmp-missing">Tidak tercantum</td>';
         const c = r.state === 'same' ? 'cmp-same' : (r.state === 'diff' ? 'cmp-diff' : '');
@@ -2184,8 +2236,20 @@ function cmpBindClear_(){
   });
 }
  
+/* ---------- layout: ponsel = nama spek di atas nilai (tanpa kolom label) ---------- */
+const CMP_MQ = window.matchMedia('(max-width:639px)');
+let CMP_MOB = CMP_MQ.matches;
+let cmpSumOpen = null;          // null = ikut default (terbuka di layar lebar, tertutup di ponsel)
+let _cmpIO = null;
+function cmpSpan_(colN){ return colN + (CMP_MOB ? 0 : 1); }
+CMP_MQ.addEventListener && CMP_MQ.addEventListener('change', () => {
+  if (el('view-compare').classList.contains('active') && cmpItems.length >= 2) renderCompare_();
+});
+
 /* ---------- render halaman perbandingan ---------- */
 function renderCompare_(){
+  CMP_MOB = CMP_MQ.matches;
+  if (_cmpIO){ _cmpIO.disconnect(); _cmpIO = null; }
   const root = el('view-compare');
   const items = cmpItems;
  
@@ -2220,12 +2284,12 @@ function renderCompare_(){
  
   // ringkasan
   const sumHtml =
-    '<div class="cmp-summary"><p class="cmp-sum-title">Ringkasan perbandingan</p>' +
+    '<details class="cmp-summary"' + ((cmpSumOpen === null ? !CMP_MOB : cmpSumOpen) ? ' open' : '') + '><summary class="cmp-sum-title">Ringkasan perbandingan</summary>' +
     '<ul>' + sum.lines.map(l => '<li>' + esc_(l) + '</li>').join('') + '</ul>' +
     (sum.hl.length
       ? '<p class="cmp-sum-sub">Perbedaan utama</p><ul>' + sum.hl.map(l => '<li>' + esc_(l) + '</li>').join('') + '</ul>'
       : '') +
-    '</div>';
+    '</details>';
  
   // toolbar
   const toolbar =
@@ -2251,28 +2315,44 @@ function renderCompare_(){
   ).join('');
  
   // isi spesifikasi
-  const msgRow = t => '<tr><td class="cmp-empty-row" colspan="' + (colN + 1) + '">' + t + '</td></tr>';
+  const msgRow = t => '<tr><td class="cmp-empty-row" colspan="' + cmpSpan_(colN) + '">' + t + '</td></tr>';
   let specBody;
   if (sp.nAct < 2){
     specBody = msgRow('Spesifikasi detail belum bisa dibandingkan: dibutuhkan minimal 2 produk yang datanya sudah tersedia.');
   } else {
     specBody = cmpSpecRowsHtml_(sp, onlyDiff, colN) || msgRow('Tidak ada perbedaan pada spesifikasi detail.');
   }
-  const specSec = '<tr class="cmp-sec"><td colspan="' + (colN + 1) + '">Spesifikasi detail</td></tr>';
+  const specSec = '<tr class="cmp-sec"><td colspan="' + cmpSpan_(colN) + '">Spesifikasi detail</td></tr>';
  
   // catatan lama (kolom O) hanya untuk produk yang belum punya spek terstruktur
   const adaCatatan = items.some((m, i) => !sp.hasSpec[i] && m.spesifikasi && m.spesifikasi.length);
   const catatanRow = adaCatatan
-    ? '<tr><td class="label">Catatan</td>' + items.map((m, i) => (!sp.hasSpec[i] && m.spesifikasi && m.spesifikasi.length)
+    ? (CMP_MOB ? '<tr class="cmp-lbl"><td colspan="' + colN + '">Catatan</td></tr><tr>' : '<tr><td class="label">Catatan</td>') + items.map((m, i) => (!sp.hasSpec[i] && m.spesifikasi && m.spesifikasi.length)
         ? '<td><ul>' + m.spesifikasi.slice(0, 4).map(s => '<li>' + esc_(s) + '</li>').join('') + '</ul></td>'
         : '<td class="cmp-nodata">—</td>').join('') + '</tr>'
     : '';
  
+  // header mini (muncul saat header besar sudah terscroll keluar)
+  const Pm = cmpPrices_(items);
+  const miniBar =
+    '<div class="cmp-mini-wrap"><div class="cmp-mini" style="grid-template-columns:' +
+      (CMP_MOB ? '' : 'var(--cmp-lbl) ') + 'repeat(' + colN + ',minmax(0,1fr))">' +
+      (CMP_MOB ? '' : '<div></div>') +
+      items.map((m, i) =>
+        '<div class="cmp-mini-item"><div class="thumb-wrap">' + thumbHtml(m.thumbnail) + '</div>' +
+        '<div class="cmp-mini-txt"><b>' + esc_(m._famTitle || cleanName(m.model)) + '</b>' +
+        (m._label ? '<span class="cfg">' + esc_(m._label) + '</span>' : '') +
+        (Pm.pr[i] > 0 ? '<span class="' + (Pm.priced.length > 1 && !Pm.allSame && Pm.pr[i] === Pm.minP ? 'best' : '') + '">' + rupiah(Pm.pr[i]) + '</span>' : '') +
+        '</div></div>').join('') +
+    '</div></div>';
+
   root.innerHTML =
     warn + sumHtml + toolbar +
+    miniBar +
     '<div class="cmp-scroll">' +
-      '<table id="compare-table" style="min-width:' + (90 + colN * 140) + 'px">' +
-        '<thead><tr><th class="label"></th>' + head + '</tr></thead>' +
+      '<table id="compare-table">' +
+        '<colgroup>' + (CMP_MOB ? '' : '<col style="width:var(--cmp-lbl)">') + items.map(() => '<col>').join('') + '</colgroup>' +
+        '<thead><tr>' + (CMP_MOB ? '' : '<th class="label"></th>') + head + '</tr></thead>' +
         '<tbody>' + cmpTopRowsHtml_(items) + specSec + specBody + catatanRow + '</tbody>' +
       '</table>' +
     '</div>' +
@@ -2288,6 +2368,26 @@ function renderCompare_(){
     b.addEventListener('click', () => cmpRemove_(b.dataset.rm));
   });
   cmpBindClear_();
+
+  const det = root.querySelector('details.cmp-summary');
+  if (det) det.addEventListener('toggle', () => { cmpSumOpen = det.open; });
+
+  const mini = root.querySelector('.cmp-mini'), headEl = root.querySelector('#compare-table thead');
+  if (mini && headEl){
+    const tb = (document.getElementById('topbar') || {}).offsetHeight || 65;
+    root.style.setProperty('--tb', tb + 'px');
+    mini.addEventListener('click', () => {
+      const y = headEl.getBoundingClientRect().top + window.scrollY - tb - 8;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    });
+    if ('IntersectionObserver' in window){
+      _cmpIO = new IntersectionObserver(es => {
+        const e = es[es.length - 1];
+        mini.classList.toggle('show', !e.isIntersecting && e.boundingClientRect.bottom <= tb + 2);
+      }, { rootMargin: '-' + tb + 'px 0px 0px 0px', threshold: 0 });
+      _cmpIO.observe(headEl);
+    }
+  }
 }
  
 /* ---------- pintu masuk (dipakai grid, detail, modal, dan riwayat browser) ---------- */
