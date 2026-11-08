@@ -366,6 +366,8 @@
 .cmp-seg button.active{background:var(--brand);color:var(--brand-fg);}
 #cmp-copy{margin-left:auto;padding:8px 16px;border-radius:999px;background:var(--surface);font-size:12.5px;font-weight:600;}
 #cmp-copy:hover{background:var(--border);}
+#cmp-share{padding:8px 16px;border-radius:999px;background:var(--brand);color:var(--brand-fg);font-size:12.5px;font-weight:600;}
+#cmp-share:hover{opacity:.9;}
  
 /* tabel: scroll di dalam kotak supaya header & kolom label bisa menempel */
 .cmp-scroll{overflow:auto;max-height:78vh;border:1px solid var(--border);border-radius:var(--radius);background:#fff;-webkit-overflow-scrolling:touch;}
@@ -639,6 +641,11 @@ async function loadCompare(ids){
    ========================================================= */
 function rupiah(n){ return 'Rp ' + Math.round(n).toLocaleString('id-ID'); }
 const BEST_TAG_SRC = 'assets/BEST_PRICE.png';
+
+/* ---------- Mode Presentasi: sembunyikan best price (harga internal) ---------- */
+let PRESENTASI = false;
+const bestOf  = x => PRESENTASI ? 0 : (Number(x && x.hargaBest) || 0);   // best price satu varian
+const famBest = f => PRESENTASI ? 0 : (f.best || 0);                      // best price terendah satu keluarga
 function bestBadgeHtml(prefix, nominal){
   return `<div class="bp-badge">
     <span class="bp-top">Best price</span>
@@ -974,7 +981,7 @@ function refreshGrid(){
 
   // Tampilan awal (urutan default, tanpa pencarian): produk best price di atas
   if (sortMode === 'default' && !q){
-    list = [...list].sort((a, b) => (famMap[b._fam].best > 0) - (famMap[a._fam].best > 0));
+    list = [...list].sort((a, b) => (famBest(famMap[b._fam]) > 0) - (famBest(famMap[a._fam]) > 0));
   }
   
   allProducts = list;
@@ -1076,12 +1083,12 @@ function renderGrid(products){
     const thumb = p.thumbnail || f.thumb;
     const harga = (multi && f.min > 0) ? 'Mulai ' + rupiah(f.min) : priceRange(p);
     const disabled = !compareSet.has(p.id) && compareSet.size >= 3;
-    const best = f.best > 0;
+    const best = famBest(f) > 0;
     return `
     <div class="card" data-id="${p.id}">
       ${thumb ? `<img src="${thumb}" alt="" loading="lazy" onerror="handleImgError(this)">` : `<div class="ph-icon">${icon('box')}</div>`}
       ${multi ? `<span class="badge">${f.members.length} varian</span>` : ''}
-      ${best ? bestBadgeHtml(multi ? 'Mulai ' : '', f.best) : ''}
+      ${best ? bestBadgeHtml(multi ? 'Mulai ' : '', famBest(f)) : ''}
       <button class="cmp-toggle" data-cmp="${p.id}" style="opacity:${disabled?'.35':'1'};color:${compareSet.has(p.id)?'var(--brand)':'var(--text-2)'}">${icon('compare')}</button>
       <div class="overlay">
         <p class="kat">#${p.kategori || 'Produk'}${f.sub ? ' · ' + f.sub : ''}</p>
@@ -1093,7 +1100,7 @@ function renderGrid(products){
 
   // Batasi baris best price hanya di tampilan awal (urutan default, tanpa pencarian)
   const bestOn = sortMode === 'default' && !searchTerm.trim();
-  const nb = bestOn ? arr.filter(p => famMap[p._fam].best > 0).length : 0;
+  const nb = bestOn ? arr.filter(p => famBest(famMap[p._fam]) > 0).length : 0;
   let html;
   if(bestOn && nb > BEST_LIMIT){
     const bests = arr.slice(0, nb), rest = arr.slice(nb);
@@ -1150,7 +1157,7 @@ function withModelLain(p){
     .filter(o => o.key !== f.key && f.jenis && o.jenis === f.jenis)
     .map(o => ({ id: o.rep.id, model: o.title, thumbnail: o.thumb, hargaMin: o.min, hargaMax: o.max }));
   return Object.assign({}, p, {
-    konfigurasi: f.members.map(m => ({ id: m.id, label: m._label, best: m.hargaBest > 0 })),
+    konfigurasi: f.members.map(m => ({ id: m.id, label: m._label, best: bestOf(m) > 0 })),
     modelLain: lain,
   });
 }
@@ -1430,7 +1437,7 @@ function renderDetail(p){
            <div class="hs-track">${images.map((u, i) =>
              `<div class="hs-slide${i === 0 ? ' active' : ''}"><img src="${i === 0 ? (p.thumbnail || u) : u}" alt="${p.model}" draggable="false" onerror="this.style.visibility='hidden'"></div>`
            ).join('')}</div>
-           ${p.hargaBest > 0 ? bestBadgeHtml('', p.hargaBest) : ''}
+           ${bestOf(p) > 0 ? bestBadgeHtml('', bestOf(p)) : ''}
            ${images.length > 1 ? `<div class="hs-dots">${images.map((u, i) =>
              `<button type="button" class="hs-dot${i === 0 ? ' active' : ''}" data-i="${i}" aria-label="Gambar ${i + 1}"></button>`
            ).join('')}</div>` : ''}
@@ -1458,7 +1465,7 @@ function renderDetail(p){
       <div>
         <p class="lbl">Harga</p>
         <p class="val" id="price-out"></p>
-        ${p.hargaBest > 0 ? `<p class="bp-line"><span class="bp-tag">Best price</span>${rupiah(p.hargaBest)}</p>` : ''}
+        ${bestOf(p) > 0 ? `<p class="bp-line"><span class="bp-tag">Best price</span>${rupiah(bestOf(p))}</p>` : ''}
       </div>
       <button id="detail-compare-btn" data-id="${p.id}">${icon('compare')}<span>Bandingkan</span></button>
     </div>
@@ -2095,7 +2102,7 @@ function cmpSummary_(items, sp){
   }
  
   const bp = [];
-  items.forEach((m, i) => { if (m.hargaBest > 0) bp.push(names[i] + ' ' + rupiah(m.hargaBest)); });
+  items.forEach((m, i) => { if (bestOf(m) > 0) bp.push(names[i] + ' ' + rupiah(bestOf(m))); });
   if (bp.length) lines.push('Best price: ' + bp.join('; ') + '.');
  
   if (sp.nAct >= 2) lines.push(sp.nDiff + ' dari ' + (sp.nDiff + sp.nSame) + ' spesifikasi berbeda, ' + sp.nSame + ' sama.');
@@ -2153,8 +2160,8 @@ function cmpTopRowsHtml_(items){
     return '<td class="cmp-price' + best + '">' + esc_(priceRange(m)) + extra + '</td>';
   }));
  
-  if (items.some(m => m.hargaBest > 0)){
-    const bs = items.map(m => m.hargaBest > 0 ? m.hargaBest : 0);
+  if (items.some(m => bestOf(m) > 0)){
+    const bs = items.map(m => bestOf(m));
     const bp = bs.filter(x => x > 0), bmin = Math.min.apply(null, bp);
     h += row('Best price', bs.map(b => b > 0
       ? '<td class="cmp-price' + (bp.length > 1 && b === bmin ? ' cmp-best' : '') + '">' + rupiah(b) + '</td>'
@@ -2217,6 +2224,15 @@ function cmpCopy_(text, btn){
   }
 }
  
+// Bagikan ringkasan: lembar Share bawaan HP; kalau tidak ada, buka WhatsApp
+function cmpShare_(text){
+  if (navigator.share){
+    navigator.share({ title: 'Perbandingan Produk Elitech', text: text }).catch(() => {});
+  } else {
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+  }
+}
+
 function cmpRemove_(id){
   compareSet.delete(id);
   cmpItems = cmpItems.filter(m => m.id !== id);
@@ -2301,6 +2317,7 @@ function renderCompare_(){
           '</div>'
         : '') +
       '<button type="button" id="cmp-copy">Salin ringkasan</button>' +
+      '<button type="button" id="cmp-share">Bagikan</button>' +
     '</div>' +
     '<div id="compare-legend"><span><i class="i-same"></i> Sama</span><span><i class="i-diff"></i> Beda</span></div>';
  
@@ -2364,6 +2381,8 @@ function renderCompare_(){
   });
   const copyBtn = document.getElementById('cmp-copy');
   if (copyBtn) copyBtn.addEventListener('click', () => cmpCopy_(sum.text, copyBtn));
+  const shareBtn = document.getElementById('cmp-share');
+  if (shareBtn) shareBtn.addEventListener('click', () => cmpShare_(sum.text + '\n\nKatalog: ' + location.origin + location.pathname));
   root.querySelectorAll('[data-rm]').forEach(b => {
     b.addEventListener('click', () => cmpRemove_(b.dataset.rm));
   });
@@ -2421,11 +2440,35 @@ function updateCompareUI(){
   }
   const vb = el('compare-view-btn');
   if (vb) vb.disabled = n < 2;
+  if (window.parent !== window) window.parent.postMessage({ __elitechBadge: { tool: 'katalog', n: n } }, '*');
   const detailBtn = el('detail-compare-btn');
   if (detailBtn){
     detailBtn.classList.toggle('active', compareSet.has(detailBtn.dataset.id));
   }
 }
+
+/* =========================================================
+   MODE PRESENTASI + KOMUNIKASI DENGAN SHELL
+   ========================================================= */
+function setPresentasi(on){
+  on = !!on;
+  if (on === PRESENTASI) return;
+  PRESENTASI = on;
+  document.body.classList.toggle('presentasi', on);
+  if (!masterProducts.length) return;
+  refreshGrid();                                        // urutan & badge best price di grid
+  if (el('view-detail').classList.contains('active')){
+    const id = history.state && history.state.id, p = id && byId[id];
+    if (p && Array.isArray(p.varian)) renderDetail(withModelLain(p));
+  }
+  if (el('view-compare').classList.contains('active') && cmpItems.length >= 2) renderCompare_();
+}
+// hanya terima pesan dari halaman induk (shell)
+window.addEventListener('message', e => {
+  if (e.source !== window.parent) return;
+  const d = e.data;
+  if (d && d.__elitech === 'mode') setPresentasi(d.presentasi);
+});
 
 /* =========================================================
    INIT
@@ -2503,6 +2546,15 @@ bindFilters();
   loadSpekAlias();     // sinonim label spek dari sheet SINONIM_SPEK (di belakang layar)
   prefetchThumbs();
 })();
+
+// Teruskan kabar "versi baru" dari service worker ke shell (supaya banner tampil di shell)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data && e.data.type === 'ELITECH_UPDATE' && window.parent !== window) {
+      window.parent.postMessage({ __elitechUpdate: true }, '*');
+    }
+  });
+}
 
 // Service worker Katalog: simpan file aplikasi + gambar di perangkat (offline & cepat).
 // sw.js harus ada di folder yang sama dengan index.html ini (repo "product").
