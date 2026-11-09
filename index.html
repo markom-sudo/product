@@ -230,11 +230,17 @@
   .variant-box.active{background:var(--brand);color:var(--brand-fg);border-color:var(--brand);}
   #variant-select{width:100%;height:44px;font-size:14px;border:1px solid var(--border);border-radius:9px;padding:0 12px;background:var(--card);color:var(--text);margin-bottom:16px;}
 
-  .price-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .price-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;}
   .price-row .lbl{font-size:11px;color:var(--text-3);margin:0;}
   .price-row .val{font-size:22px;font-weight:700;margin:0;}
-  #detail-compare-btn{display:flex;align-items:center;gap:7px;padding:10px 16px;border-radius:999px;background:var(--surface);font-size:13px;font-weight:600;}
+  .price-actions{display:flex;gap:8px;flex-shrink:0;}
+  #detail-compare-btn,#detail-share-btn{display:flex;align-items:center;gap:7px;padding:10px 16px;border-radius:999px;background:var(--surface);font-size:13px;font-weight:600;}
   #detail-compare-btn.active{background:var(--brand);color:var(--brand-fg);}
+  #detail-share-btn:hover{background:var(--brand-soft);color:var(--brand);}
+  @media (max-width:400px){
+    #detail-share-btn span{display:none;}
+    #detail-share-btn{padding:10px 12px;}
+  }
 
   #spec-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:9px;background:var(--surface);margin-bottom:16px;}
   #spec-toggle span{font-size:13px;font-weight:600;}
@@ -544,6 +550,16 @@ details.cmp-summary:not([open]) > summary{margin:0;}
 /* ---------- Mode gelap: penyesuaian kecil ---------- */
 :root[data-theme="dark"] .card:hover{box-shadow:0 12px 26px rgba(0,0,0,.5);}
 :root[data-theme="dark"] .cmp-mini{box-shadow:0 8px 18px rgba(0,0,0,.45);}
+
+/* ---------- Toast kecil (link disalin, dll.) ---------- */
+#toast{
+  position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:300;
+  transform:translate(-50%,12px);max-width:calc(100vw - 32px);
+  padding:10px 18px;border-radius:999px;background:var(--text);color:var(--bg);
+  font-size:13px;font-weight:500;box-shadow:0 6px 20px rgba(20,21,26,.25);
+  opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;
+}
+#toast.show{opacity:1;transform:translate(-50%,0);}
 </style>
 </head>
 <body>
@@ -638,6 +654,8 @@ details.cmp-summary:not([open]) > summary{margin:0;}
   </div>
 </div>
 
+<div id="toast" role="status" aria-live="polite"></div>
+
 <script>
 /* =========================================================
    KONFIGURASI
@@ -651,6 +669,7 @@ const ICONS = {
   search: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
   back: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
   compare: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h13M7 7l3-3M7 7l3 3M17 17H4M17 17l-3-3M17 17l-3 3"/></svg>',
+  share: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.5l6.8-4M8.6 13.5l6.8 4"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
   doc: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>',
   cert: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6"/><path d="M9 14.5L7.5 21 12 18.5 16.5 21 15 14.5"/></svg>',
@@ -691,6 +710,7 @@ let modalConfirmTargetId = null;
 let popupAddedId = null; 
 let cmpItems = [];          // produk yang sedang dibandingkan
 let cmpOnlyDiff = true;     // true = tampilkan hanya baris yang berbeda
+let SHELL_URL = '';         // alamat halaman shell (dikirim shell); dipakai untuk link bagikan
 
 const el = id => document.getElementById(id);
 
@@ -735,7 +755,7 @@ async function loadCompare(ids){
 function rupiah(n){ return 'Rp ' + Math.round(n).toLocaleString('id-ID'); }
 const BEST_TAG_SRC = 'assets/BEST_PRICE.png';
 
-/* ---------- Mode Presentasi: sembunyikan best price (harga internal) ---------- */
+/* ---------- Mode Presentasi: sembunyikan best price ---------- */
 let PRESENTASI = false;
 const bestOf  = x => PRESENTASI ? 0 : (Number(x && x.hargaBest) || 0);   // best price satu varian
 const famBest = f => PRESENTASI ? 0 : (f.best || 0);                      // best price terendah satu keluarga
@@ -755,6 +775,16 @@ function thumbHtml(url){
 }
 function iconBoxOnly(){
   return `<div class="ph-icon">${icon('box')}</div>`;
+}
+
+/* ---------- Toast kecil ---------- */
+let toastTimer = null;
+function showToast(msg){
+  const t = el('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
 /* =========================================================
@@ -898,6 +928,68 @@ function matchScore(p, q, relaxed){
 }
 
 /* =========================================================
+   LINK LANGSUNG (deep link) + LAPOR HALAMAN KE SHELL
+   Path yang dikenal:
+     ''                    -> daftar produk (grid)
+     'produk/<id>'         -> detail produk (id di-encodeURIComponent)
+   ========================================================= */
+// Beri tahu shell halaman apa yang sedang dibuka, supaya hash URL shell selalu bisa dibagikan.
+function reportNav(path){
+  if (window.parent !== window) window.parent.postMessage({ __elitechNav: { path: path || '' } }, '*');
+}
+const detailPath = id => 'produk/' + encodeURIComponent(id);
+
+// Alamat yang dibagikan: selalu alamat shell (supaya tema, mode presentasi, dan badge ikut jalan).
+function shareUrl(id){
+  const base = SHELL_URL || (location.origin + location.pathname);
+  return base + '#katalog/' + detailPath(id);
+}
+
+// Dipanggil dari pesan shell {__elitech:'goto', path} atau dari hash sendiri saat dibuka tanpa shell.
+function gotoPath(path){
+  path = String(path || '');
+  const m = path.match(/^produk\/(.+)$/);
+  if (!m){ goHome(); return; }
+  let id = m[1];
+  try { id = decodeURIComponent(id); } catch (e) {}
+  const sedangDi = el('view-detail').classList.contains('active') && history.state && history.state.id === id;
+  if (sedangDi) return;                 // sudah di halaman itu
+  openDetail(id);
+}
+
+function copyText(text){
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    ta.remove();
+    return ok;
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(text).then(() => true).catch(() => fallback());
+  }
+  return Promise.resolve(fallback());
+}
+
+async function shareProduct(p){
+  const url = shareUrl(p.id);
+  const title = (p._famTitle || p.namaDasar || 'Produk Elitech') + (p._label && p._label !== 'STANDARD' ? ' ' + p._label : '');
+  if (navigator.share){
+    try {
+      await navigator.share({ title: title, text: title + ' (Elitech)', url: url });
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;       // pengguna menutup lembar Bagikan
+      /* tidak diizinkan di perangkat/iframe ini -> salin saja */
+    }
+  }
+  const ok = await copyText(url);
+  showToast(ok ? 'Link produk disalin' : 'Tidak bisa menyalin. Salin dari kolom alamat.');
+}
+
+/* =========================================================
    TOP BAR: search morph + title -> home
    ========================================================= */
 el('search-toggle').innerHTML = icon('search');
@@ -988,6 +1080,7 @@ function showGrid(){
   lastGridAnim = 0;                           // kembali ke grid: kartu selalu masuk berurutan
   renderGrid(allProducts, true);
   collapseSearch();
+  reportNav('');
   switchView('grid', 'Katalog Elitech', false, () => window.scrollTo(0, gridScroll));
 }
 
@@ -1218,7 +1311,7 @@ function renderGrid(products, animate){
       ${thumb ? `<img src="${thumb}" alt="" loading="lazy" onerror="handleImgError(this)">` : `<div class="ph-icon">${icon('box')}</div>`}
       ${multi ? `<span class="badge">${f.members.length} varian</span>` : ''}
       ${best ? bestBadgeHtml(multi ? 'Mulai ' : '', famBest(f)) : ''}
-      <button class="cmp-toggle" data-cmp="${p.id}" style="opacity:${disabled?'.35':'1'};color:${compareSet.has(p.id)?'var(--brand)':'var(--text-2)'}">${icon('compare')}</button>
+      <button class="cmp-toggle" data-cmp="${p.id}" aria-label="Bandingkan produk" style="opacity:${disabled?'.35':'1'};color:${compareSet.has(p.id)?'var(--brand)':'var(--text-2)'}">${icon('compare')}</button>
       <div class="overlay">
         <p class="kat">#${p.kategori || 'Produk'}${f.sub ? ' · ' + f.sub : ''}</p>
         <p class="nama">${f.title}</p>
@@ -1298,12 +1391,14 @@ function swapDetail(id){
   if(!p || !Array.isArray(p.varian)) return openDetail(id);
   history.replaceState(Object.assign({}, history.state, { id: id }), '');
   el('page-title').textContent = cleanName(p.model);
+  reportNav(detailPath(id));
   renderDetail(withModelLain(p));
   replayIn(el('view-detail'));                // ganti konfigurasi: isi detail ikut beranimasi
 }
 
 async function openDetail(id, noPush){
   if(!noPush) pushNav({ v: 'detail', id: id });
+  reportNav(detailPath(id));
   const local = byId[id];
   if(local && Array.isArray(local.varian)){
     switchView('detail', local.model, true);
@@ -1597,7 +1692,10 @@ function renderDetail(p){
         <p class="val" id="price-out"></p>
         ${bestOf(p) > 0 ? `<p class="bp-line"><span class="bp-tag">Best price</span>${rupiah(bestOf(p))}</p>` : ''}
       </div>
-      <button id="detail-compare-btn" data-id="${p.id}">${icon('compare')}<span>Bandingkan</span></button>
+      <div class="price-actions">
+        <button id="detail-share-btn" aria-label="Bagikan produk">${icon('share')}<span>Bagikan</span></button>
+        <button id="detail-compare-btn" data-id="${p.id}">${icon('compare')}<span>Bandingkan</span></button>
+      </div>
     </div>
 
     ${specGroupsHtml}
@@ -1691,6 +1789,9 @@ priceOut.textContent = rupiah(varian[0].harga);
   }
 
   
+  // bagikan link produk
+  document.getElementById('detail-share-btn').addEventListener('click', ()=> shareProduct(p));
+
   // compare button
   document.getElementById('detail-compare-btn').addEventListener('click', ()=> openComparePopup(p.id));
   updateCompareUI();
@@ -2512,7 +2613,7 @@ function renderCompare_(){
   const copyBtn = document.getElementById('cmp-copy');
   if (copyBtn) copyBtn.addEventListener('click', () => cmpCopy_(sum.text, copyBtn));
   const shareBtn = document.getElementById('cmp-share');
-  if (shareBtn) shareBtn.addEventListener('click', () => cmpShare_(sum.text + '\n\nKatalog: ' + location.origin + location.pathname));
+  if (shareBtn) shareBtn.addEventListener('click', () => cmpShare_(sum.text + '\n\nKatalog: ' + (SHELL_URL || (location.origin + location.pathname))));
   root.querySelectorAll('[data-rm]').forEach(b => {
     b.addEventListener('click', () => cmpRemove_(b.dataset.rm));
   });
@@ -2542,6 +2643,7 @@ function renderCompare_(){
 /* ---------- pintu masuk (dipakai grid, detail, modal, dan riwayat browser) ---------- */
 async function openCompareView(ids, noPush){
   if (!noPush) pushNav({ v: 'compare', ids: ids });
+  reportNav('');
   switchView('compare', 'Perbandingan', true);
  
   if (!ids.length){
@@ -2593,13 +2695,17 @@ function setPresentasi(on){
   }
   if (el('view-compare').classList.contains('active') && cmpItems.length >= 2) renderCompare_();
 }
-// hanya terima pesan dari halaman induk (shell): mode presentasi & tema
+// hanya terima pesan dari halaman induk (shell): mode presentasi, tema, dan link langsung
 window.addEventListener('message', e => {
   if (e.source !== window.parent) return;
   const d = e.data;
   if (!d) return;
-  if (d.__elitech === 'mode') setPresentasi(d.presentasi);
+  if (d.__elitech === 'mode'){
+    if (typeof d.shell === 'string' && d.shell) SHELL_URL = d.shell;
+    setPresentasi(d.presentasi);
+  }
   else if (d.__elitech === 'theme' && window.__setTheme) window.__setTheme(d.theme);
+  else if (d.__elitech === 'goto') gotoPath(d.path);
 });
 
 /* =========================================================
@@ -2675,6 +2781,8 @@ bindFilters();
     }
   }
   notifyReady();
+  // Dibuka langsung tanpa shell (bukan di iframe): baca link sendiri, mis. ...index.html#katalog/produk/<id>
+  if (window.parent === window && /^#katalog\//.test(location.hash)) gotoPath(location.hash.replace(/^#katalog\//, ''));
   loadSpekAlias();     // sinonim label spek dari sheet SINONIM_SPEK (di belakang layar)
   prefetchThumbs();
 })();
